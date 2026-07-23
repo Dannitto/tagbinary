@@ -59,6 +59,7 @@ export default function AdminTradesPage() {
           <Link href="/admin" className="block px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">Dashboard</Link>
           <Link href="/admin/users" className="block px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">Users</Link>
           <Link href="/admin/trades" className="block px-4 py-3 rounded-xl bg-blue-600/20 text-blue-400 font-medium">Trades</Link>
+          <Link href="/admin/deposits" className="block px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">Deposits</Link>
           <Link href="/admin/payment-methods" className="block px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">Payment Methods</Link>
         </nav>
         <div className="p-4 border-t border-slate-800">
