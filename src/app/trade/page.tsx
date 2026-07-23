@@ -20,16 +20,35 @@ export default function TradePage() {
   const [prices, setPrices] = useState<number[]>([9386.34]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Load user + real balance
   useEffect(() => {
-    const getUser = async () => {
+    const loadUserAndBalance = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) router.push("/login");
-      else setUser(user);
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      setUser(user);
+
+      // Load real balance from profiles table
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("balance")
+        .eq("id", user.id)
+        .single();
+
+      if (profile) {
+        setBalance(Number(profile.balance));
+      }
+
       setLoading(false);
     };
-    getUser();
+
+    loadUserAndBalance();
   }, [router]);
 
+  // Simulated live price
   useEffect(() => {
     if (loading) return;
     const interval = setInterval(() => {
@@ -48,6 +67,7 @@ export default function TradePage() {
     return () => clearInterval(interval);
   }, [loading]);
 
+  // Chart drawing
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || prices.length < 2) return;
@@ -65,7 +85,6 @@ export default function TradePage() {
 
     ctx.clearRect(0, 0, width, height);
 
-    // subtle grid
     ctx.strokeStyle = "rgba(148, 163, 184, 0.05)";
     ctx.lineWidth = 1;
     for (let i = 1; i < 6; i++) {
@@ -80,7 +99,6 @@ export default function TradePage() {
     const max = Math.max(...prices) + 0.8;
     const range = max - min;
 
-    // gradient fill
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
     gradient.addColorStop(0, "rgba(59, 130, 246, 0.22)");
     gradient.addColorStop(1, "rgba(59, 130, 246, 0)");
@@ -98,7 +116,6 @@ export default function TradePage() {
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    // main line
     ctx.beginPath();
     ctx.strokeStyle = "#3b82f6";
     ctx.lineWidth = 2.5;
@@ -117,28 +134,59 @@ export default function TradePage() {
     router.push("/login");
   };
 
-  const placeTrade = (type: "match" | "differ") => {
-    if (isTrading) return;
+  const placeTrade = async (type: "match" | "differ") => {
+    if (isTrading || !user) return;
     if (stake > balance) {
       setResult("Insufficient balance");
       return;
     }
 
     setIsTrading(true);
-    setBalance((b) => b - stake);
     setResult("Trade placed... waiting...");
 
-    setTimeout(() => {
+    // Deduct stake immediately
+    const newBalance = balance - stake;
+    setBalance(newBalance);
+
+    // Update balance in database
+    await supabase
+      .from("profiles")
+      .update({ balance: newBalance })
+      .eq("id", user.id);
+
+    setTimeout(async () => {
       const finalDigit = Math.floor(price) % 10;
       const won = type === "match" ? finalDigit === selectedDigit : finalDigit !== selectedDigit;
       const payout = type === "match" ? stake * 9.5 : stake * 1.05;
+      const profit = won ? payout - stake : -stake;
+
+      let finalBalance = newBalance;
 
       if (won) {
-        setBalance((b) => b + payout);
+        finalBalance = newBalance + payout;
+        setBalance(finalBalance);
         setResult(`WIN +$${payout.toFixed(2)}`);
       } else {
         setResult(`LOSS -$${stake.toFixed(2)}`);
       }
+
+      // Update final balance
+      await supabase
+        .from("profiles")
+        .update({ balance: finalBalance })
+        .eq("id", user.id);
+
+      // Save trade to database
+      await supabase.from("trades").insert({
+        user_id: user.id,
+        type: type,
+        digit: selectedDigit,
+        stake: stake,
+        payout: won ? payout : 0,
+        result: won ? "WIN" : "LOSS",
+        profit: profit,
+      });
+
       setIsTrading(false);
     }, 2800);
   };
@@ -152,7 +200,6 @@ export default function TradePage() {
 
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-100">
-      {/* Header */}
       <header className="border-b border-slate-800/80 bg-[#0B1120]/90 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-5 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-8">
@@ -189,7 +236,6 @@ export default function TradePage() {
 
       <main className="max-w-7xl mx-auto px-5 py-6">
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Chart */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-end justify-between">
               <div>
@@ -209,11 +255,9 @@ export default function TradePage() {
             </div>
           </div>
 
-          {/* Trading Panel */}
           <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/20">
             <h2 className="font-semibold text-lg mb-6">Place Trade</h2>
 
-            {/* Stake */}
             <div className="mb-6">
               <label className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-2.5 block">Stake</label>
               <div className="flex items-center gap-2 mb-3">
@@ -241,7 +285,6 @@ export default function TradePage() {
               </div>
             </div>
 
-            {/* Digit */}
             <div className="mb-6">
               <label className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-2.5 block">Select Digit</label>
               <div className="grid grid-cols-5 gap-2">
@@ -261,7 +304,6 @@ export default function TradePage() {
               </div>
             </div>
 
-            {/* Buttons */}
             <div className="space-y-3">
               <button
                 onClick={() => placeTrade("match")}
