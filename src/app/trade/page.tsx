@@ -34,12 +34,12 @@ export default function TradePage() {
     if (loading) return;
     const interval = setInterval(() => {
       setPrice((prev) => {
-        const change = (Math.random() - 0.5) * 1.5;
+        const change = (Math.random() - 0.5) * 1.4;
         const newPrice = Math.round((prev + change) * 100) / 100;
         setLastPrice(prev);
         setPrices((old) => {
           const updated = [...old, newPrice];
-          if (updated.length > 90) updated.shift();
+          if (updated.length > 100) updated.shift();
           return updated;
         });
         return newPrice;
@@ -65,28 +65,30 @@ export default function TradePage() {
 
     ctx.clearRect(0, 0, width, height);
 
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.06)";
+    // subtle grid
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.05)";
     ctx.lineWidth = 1;
-    for (let i = 1; i < 5; i++) {
-      const y = (height / 5) * i;
+    for (let i = 1; i < 6; i++) {
+      const y = (height / 6) * i;
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
       ctx.stroke();
     }
 
-    const min = Math.min(...prices) - 0.5;
-    const max = Math.max(...prices) + 0.5;
+    const min = Math.min(...prices) - 0.8;
+    const max = Math.max(...prices) + 0.8;
     const range = max - min;
 
+    // gradient fill
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, "rgba(59, 130, 246, 0.25)");
+    gradient.addColorStop(0, "rgba(59, 130, 246, 0.22)");
     gradient.addColorStop(1, "rgba(59, 130, 246, 0)");
 
     ctx.beginPath();
     prices.forEach((p, i) => {
       const x = (i / (prices.length - 1)) * width;
-      const y = height - ((p - min) / range) * (height - 30) - 15;
+      const y = height - ((p - min) / range) * (height - 40) - 20;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
@@ -96,13 +98,14 @@ export default function TradePage() {
     ctx.fillStyle = gradient;
     ctx.fill();
 
+    // main line
     ctx.beginPath();
     ctx.strokeStyle = "#3b82f6";
     ctx.lineWidth = 2.5;
     ctx.lineJoin = "round";
     prices.forEach((p, i) => {
       const x = (i / (prices.length - 1)) * width;
-      const y = height - ((p - min) / range) * (height - 30) - 15;
+      const y = height - ((p - min) / range) * (height - 40) - 20;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
@@ -141,7 +144,7 @@ export default function TradePage() {
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Loading...</div>;
+    return <div className="min-h-screen bg-[#0B1120] text-white flex items-center justify-center">Loading...</div>;
   }
 
   const lastDigit = Math.floor(price) % 10;
@@ -149,6 +152,7 @@ export default function TradePage() {
 
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-100">
+      {/* Header */}
       <header className="border-b border-slate-800/80 bg-[#0B1120]/90 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-5 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-8">
@@ -162,6 +166,7 @@ export default function TradePage() {
               <Link href="/trade" className="text-white">Trade</Link>
               <Link href="/history" className="hover:text-white transition">History</Link>
               <Link href="/deposit" className="hover:text-white transition">Deposit</Link>
+              <Link href="/withdraw" className="hover:text-white transition">Withdraw</Link>
               <Link href="/profile" className="hover:text-white transition">Profile</Link>
             </div>
           </div>
@@ -184,6 +189,7 @@ export default function TradePage() {
 
       <main className="max-w-7xl mx-auto px-5 py-6">
         <div className="grid lg:grid-cols-3 gap-6">
+          {/* Chart */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-end justify-between">
               <div>
@@ -198,14 +204,16 @@ export default function TradePage() {
               </div>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-xl shadow-black/20">
-              <canvas ref={canvasRef} className="w-full h-[380px]" />
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-xl shadow-black/20">
+              <canvas ref={canvasRef} className="w-full h-[400px]" />
             </div>
           </div>
 
-          <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/20">
+          {/* Trading Panel */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/20">
             <h2 className="font-semibold text-lg mb-6">Place Trade</h2>
 
+            {/* Stake */}
             <div className="mb-6">
               <label className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-2.5 block">Stake</label>
               <div className="flex items-center gap-2 mb-3">
@@ -233,6 +241,7 @@ export default function TradePage() {
               </div>
             </div>
 
+            {/* Digit */}
             <div className="mb-6">
               <label className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-2.5 block">Select Digit</label>
               <div className="grid grid-cols-5 gap-2">
@@ -252,6 +261,7 @@ export default function TradePage() {
               </div>
             </div>
 
+            {/* Buttons */}
             <div className="space-y-3">
               <button
                 onClick={() => placeTrade("match")}
