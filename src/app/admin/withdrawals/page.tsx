@@ -10,14 +10,15 @@ export default function AdminWithdrawalsPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
+  const [message, setMessage] = useState("");
 
   const ADMIN_EMAIL = "adamsocialsapp@gmail.com";
 
-  const withdrawals = [
+  const [withdrawals, setWithdrawals] = useState([
     { id: 1, user: "Adam Essays", email: "adamsocialsapp@gmail.com", amount: 150, method: "M-Pesa", status: "Pending", date: "Jul 23, 2026 15:10" },
     { id: 2, user: "Adam Essays", email: "adamsocialsapp@gmail.com", amount: 80, method: "Bank Transfer", status: "Approved", date: "Jul 22, 2026 18:45" },
     { id: 3, user: "Demo Trader", email: "demo@tagbinary.com", amount: 300, method: "USDT", status: "Pending", date: "Jul 23, 2026 14:30" },
-  ];
+  ]);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -40,6 +41,14 @@ export default function AdminWithdrawalsPage() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
+  };
+
+  const updateStatus = (id: number, newStatus: string) => {
+    setWithdrawals(withdrawals.map(w => 
+      w.id === id ? { ...w, status: newStatus } : w
+    ));
+    setMessage(`Withdrawal #${id} marked as ${newStatus}`);
+    setTimeout(() => setMessage(""), 3000);
   };
 
   if (loading) {
@@ -86,6 +95,12 @@ export default function AdminWithdrawalsPage() {
         </header>
 
         <main className="p-6">
+          {message && (
+            <div className="mb-4 bg-green-900/30 border border-green-700 text-green-400 rounded-xl px-4 py-3 text-sm">
+              {message}
+            </div>
+          )}
+
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -112,6 +127,8 @@ export default function AdminWithdrawalsPage() {
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
                           w.status === "Approved" 
                             ? "bg-green-500/10 text-green-400" 
+                            : w.status === "Rejected"
+                            ? "bg-red-500/10 text-red-400"
                             : "bg-yellow-500/10 text-yellow-400"
                         }`}>
                           {w.status}
@@ -119,13 +136,22 @@ export default function AdminWithdrawalsPage() {
                       </td>
                       <td className="px-6 py-4 text-slate-400">{w.date}</td>
                       <td className="px-6 py-4 text-right space-x-3">
-                        {w.status === "Pending" && (
+                        {w.status === "Pending" ? (
                           <>
-                            <button className="text-green-400 hover:text-green-300 text-sm font-medium">Approve</button>
-                            <button className="text-red-400 hover:text-red-300 text-sm font-medium">Reject</button>
+                            <button 
+                              onClick={() => updateStatus(w.id, "Approved")}
+                              className="text-green-400 hover:text-green-300 text-sm font-medium"
+                            >
+                              Approve
+                            </button>
+                            <button 
+                              onClick={() => updateStatus(w.id, "Rejected")}
+                              className="text-red-400 hover:text-red-300 text-sm font-medium"
+                            >
+                              Reject
+                            </button>
                           </>
-                        )}
-                        {w.status === "Approved" && (
+                        ) : (
                           <span className="text-slate-500 text-sm">—</span>
                         )}
                       </td>
