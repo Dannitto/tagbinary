@@ -12,18 +12,31 @@ export default function DepositPage() {
   const [amount, setAmount] = useState(50);
   const [method, setMethod] = useState("mpesa");
   const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [balance, setBalance] = useState(0);
 
   useEffect(() => {
-    const getUser = async () => {
+    const loadUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.push("/login");
-      } else {
-        setUser(user);
+        return;
       }
+      setUser(user);
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("balance")
+        .eq("id", user.id)
+        .single();
+
+      if (profile) {
+        setBalance(Number(profile.balance) || 0);
+      }
+
       setLoading(false);
     };
-    getUser();
+    loadUser();
   }, [router]);
 
   const handleLogout = async () => {
@@ -31,8 +44,31 @@ export default function DepositPage() {
     router.push("/login");
   };
 
-  const handleDeposit = () => {
-    setMessage(`Deposit request of $${amount} via ${method.toUpperCase()} has been submitted. (Demo mode)`);
+  const handleDeposit = async () => {
+    if (!user) return;
+    if (amount < 10) {
+      setMessage("Minimum deposit is $10");
+      return;
+    }
+
+    setSubmitting(true);
+    setMessage("");
+
+    const { error } = await supabase.from("deposits").insert({
+      user_id: user.id,
+      amount: amount,
+      method: method,
+      status: "pending",
+    });
+
+    if (error) {
+      setMessage("Error submitting deposit. Please try again.");
+      console.error(error);
+    } else {
+      setMessage(`Deposit request of $${amount} via ${method.toUpperCase()} has been submitted successfully. Waiting for admin approval.`);
+    }
+
+    setSubmitting(false);
   };
 
   if (loading) {
@@ -57,13 +93,14 @@ export default function DepositPage() {
             <Link href="/trade" className="hover:text-white transition">Trade</Link>
             <Link href="/history" className="hover:text-white transition">History</Link>
             <Link href="/deposit" className="text-white">Deposit</Link>
+            <Link href="/withdraw" className="hover:text-white transition">Withdraw</Link>
             <Link href="/profile" className="hover:text-white transition">Profile</Link>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
               <div className="text-xs text-slate-400">Balance</div>
-              <div className="font-semibold text-green-400">$1,000.00</div>
+              <div className="font-semibold text-green-400">${balance.toFixed(2)}</div>
             </div>
             <button
               onClick={handleLogout}
@@ -134,13 +171,18 @@ export default function DepositPage() {
 
         <button
           onClick={handleDeposit}
-          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-4 rounded-xl text-lg transition"
+          disabled={submitting}
+          className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl text-lg transition"
         >
-          Continue to Payment
+          {submitting ? "Submitting..." : "Submit Deposit Request"}
         </button>
 
         {message && (
-          <div className="mt-6 bg-green-900/30 border border-green-700 text-green-400 rounded-xl p-4 text-center text-sm">
+          <div className={`mt-6 rounded-xl p-4 text-center text-sm ${
+            message.includes("successfully") 
+              ? "bg-green-900/30 border border-green-700 text-green-400" 
+              : "bg-red-900/30 border border-red-700 text-red-400"
+          }`}>
             {message}
           </div>
         )}
