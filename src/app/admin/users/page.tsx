@@ -11,50 +11,45 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [message, setMessage] = useState("");
-
-  const ADMIN_EMAIL = "adamsocialsapp@gmail.com";
-
-  // Demo users data
-  const [users, setUsers] = useState([
-    {
-      id: 1,
-      name: "Adam Essays",
-      email: "adamsocialsapp@gmail.com",
-      balance: 1000,
-      status: "Active",
-      accountType: "Real",
-      joined: "Jul 23, 2026",
-    },
-    {
-      id: 2,
-      name: "Demo Trader",
-      email: "demo@tagbinary.com",
-      balance: 5000,
-      status: "Active",
-      accountType: "Demo",
-      joined: "Jul 22, 2026",
-    },
-  ]);
-
+  const [users, setUsers] = useState<any[]>([]);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [editBalance, setEditBalance] = useState(0);
 
+  const ADMIN_EMAIL = "adamsocialsapp@gmail.com";
+
   useEffect(() => {
-    const checkAdmin = async () => {
+    const checkAdminAndLoadUsers = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+
       if (!session) {
         router.replace("/login");
         return;
       }
+
       if (session.user.email !== ADMIN_EMAIL) {
         router.replace("/dashboard");
         return;
       }
+
       setUser(session.user);
       setAuthorized(true);
+
+      // Load real users from profiles table
+      const { data: profiles, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error loading users:", error);
+      } else {
+        setUsers(profiles || []);
+      }
+
       setLoading(false);
     };
-    checkAdmin();
+
+    checkAdminAndLoadUsers();
   }, [router]);
 
   const handleLogout = async () => {
@@ -64,34 +59,49 @@ export default function AdminUsersPage() {
 
   const openEdit = (u: any) => {
     setEditingUser(u);
-    setEditBalance(u.balance);
+    setEditBalance(Number(u.balance) || 0);
   };
 
-  const saveBalance = () => {
-    setUsers(users.map(u => 
-      u.id === editingUser.id ? { ...u, balance: editBalance } : u
-    ));
-    setMessage(`Balance updated for ${editingUser.name}`);
+  const saveBalance = async () => {
+    if (!editingUser) return;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ balance: editBalance })
+      .eq("id", editingUser.id);
+
+    if (error) {
+      setMessage("Error updating balance");
+    } else {
+      setUsers(users.map(u => 
+        u.id === editingUser.id ? { ...u, balance: editBalance } : u
+      ));
+      setMessage(`Balance updated for ${editingUser.full_name || editingUser.email}`);
+    }
+
     setEditingUser(null);
     setTimeout(() => setMessage(""), 3000);
   };
 
-  const toggleBan = (id: number) => {
-    setUsers(users.map(u => 
-      u.id === id ? { ...u, status: u.status === "Active" ? "Banned" : "Active" } : u
-    ));
-  };
+  const toggleBan = async (id: string, currentStatus: boolean) => {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ is_banned: !currentStatus })
+      .eq("id", id);
 
-  const deleteUser = (id: number) => {
-    if (confirm("Are you sure you want to delete this user?")) {
-      setUsers(users.filter(u => u.id !== id));
-      setMessage("User deleted");
-      setTimeout(() => setMessage(""), 3000);
+    if (!error) {
+      setUsers(users.map(u => 
+        u.id === id ? { ...u, is_banned: !currentStatus } : u
+      ));
     }
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Checking admin access...</div>;
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+        Loading users...
+      </div>
+    );
   }
 
   if (!authorized) return null;
@@ -103,23 +113,30 @@ export default function AdminUsersPage() {
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white">T</div>
           <span className="text-lg font-bold">TagBinary</span>
         </div>
+
         <nav className="flex-1 p-4 space-y-1 text-sm">
           <Link href="/admin" className="block px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">Dashboard</Link>
           <Link href="/admin/users" className="block px-4 py-3 rounded-xl bg-blue-600/20 text-blue-400 font-medium">Users</Link>
           <Link href="/admin/trades" className="block px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">Trades</Link>
           <Link href="/admin/deposits" className="block px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">Deposits</Link>
+          <Link href="/admin/withdrawals" className="block px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">Withdrawals</Link>
           <Link href="/admin/payment-methods" className="block px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">Payment Methods</Link>
           <Link href="/admin/settings" className="block px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">Settings</Link>
         </nav>
+
         <div className="p-4 border-t border-slate-800">
-          <button onClick={handleLogout} className="w-full text-left px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">Logout</button>
+          <button onClick={handleLogout} className="w-full text-left px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">
+            Logout
+          </button>
         </div>
       </aside>
 
       <div className="flex-1 flex flex-col">
         <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
           <h1 className="text-xl font-bold">Users Management</h1>
-          <div className="text-sm text-slate-400">Logged in as <span className="text-white">{user?.email}</span></div>
+          <div className="text-sm text-slate-400">
+            Logged in as <span className="text-white">{user?.email}</span>
+          </div>
         </header>
 
         <main className="p-6">
@@ -129,53 +146,80 @@ export default function AdminUsersPage() {
             </div>
           )}
 
+          <div className="mb-4 text-sm text-slate-400">
+            Total users: <span className="text-white font-medium">{users.length}</span>
+          </div>
+
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-950/60 text-slate-400">
-                <tr>
-                  <th className="text-left px-6 py-4 font-medium">Name</th>
-                  <th className="text-left px-6 py-4 font-medium">Email</th>
-                  <th className="text-left px-6 py-4 font-medium">Balance</th>
-                  <th className="text-left px-6 py-4 font-medium">Type</th>
-                  <th className="text-left px-6 py-4 font-medium">Status</th>
-                  <th className="text-right px-6 py-4 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-800/40 transition">
-                    <td className="px-6 py-4 font-medium">{u.name}</td>
-                    <td className="px-6 py-4 text-slate-400">{u.email}</td>
-                    <td className="px-6 py-4 text-green-400">${u.balance.toFixed(2)}</td>
-                    <td className="px-6 py-4">
-                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                        u.accountType === "Real" ? "bg-blue-500/10 text-blue-400" : "bg-purple-500/10 text-purple-400"
-                      }`}>
-                        {u.accountType}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                        u.status === "Active" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
-                      }`}>
-                        {u.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right space-x-3">
-                      <button onClick={() => openEdit(u)} className="text-blue-400 hover:text-blue-300 text-sm font-medium">
-                        Edit Balance
-                      </button>
-                      <button onClick={() => toggleBan(u.id)} className="text-yellow-400 hover:text-yellow-300 text-sm font-medium">
-                        {u.status === "Active" ? "Ban" : "Unban"}
-                      </button>
-                      <button onClick={() => deleteUser(u.id)} className="text-red-400 hover:text-red-300 text-sm font-medium">
-                        Delete
-                      </button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-950/60 text-slate-400">
+                  <tr>
+                    <th className="text-left px-6 py-4 font-medium">Name</th>
+                    <th className="text-left px-6 py-4 font-medium">Email / ID</th>
+                    <th className="text-left px-6 py-4 font-medium">Balance</th>
+                    <th className="text-left px-6 py-4 font-medium">Type</th>
+                    <th className="text-left px-6 py-4 font-medium">Status</th>
+                    <th className="text-right px-6 py-4 font-medium">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {users.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-10 text-center text-slate-500">
+                        No users found yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    users.map((u) => (
+                      <tr key={u.id} className="hover:bg-slate-800/40 transition">
+                        <td className="px-6 py-4 font-medium">
+                          {u.full_name || "No name"}
+                        </td>
+                        <td className="px-6 py-4 text-slate-400 text-xs">
+                          {u.id}
+                        </td>
+                        <td className="px-6 py-4 text-green-400 font-medium">
+                          ${Number(u.balance || 0).toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                            u.account_type === "real" 
+                              ? "bg-blue-500/10 text-blue-400" 
+                              : "bg-purple-500/10 text-purple-400"
+                          }`}>
+                            {u.account_type || "demo"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                            u.is_banned 
+                              ? "bg-red-500/10 text-red-400" 
+                              : "bg-green-500/10 text-green-400"
+                          }`}>
+                            {u.is_banned ? "Banned" : "Active"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right space-x-3">
+                          <button 
+                            onClick={() => openEdit(u)} 
+                            className="text-blue-400 hover:text-blue-300 text-sm font-medium"
+                          >
+                            Edit Balance
+                          </button>
+                          <button 
+                            onClick={() => toggleBan(u.id, u.is_banned)} 
+                            className="text-yellow-400 hover:text-yellow-300 text-sm font-medium"
+                          >
+                            {u.is_banned ? "Unban" : "Ban"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </main>
       </div>
@@ -184,7 +228,9 @@ export default function AdminUsersPage() {
       {editingUser && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Edit Balance – {editingUser.name}</h3>
+            <h3 className="text-lg font-semibold mb-4">
+              Edit Balance – {editingUser.full_name || "User"}
+            </h3>
             <div className="mb-5">
               <label className="block text-sm text-slate-400 mb-1.5">New Balance ($)</label>
               <input
