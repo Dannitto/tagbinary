@@ -9,26 +9,43 @@ export default function HistoryPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
-  const trades = [
-    { id: 1, time: "Jul 23, 10:42 AM", type: "Match", digit: 5, stake: 25, result: "WIN", profit: 212.5 },
-    { id: 2, time: "Jul 23, 10:38 AM", type: "Differ", digit: 3, stake: 10, result: "LOSS", profit: -10 },
-    { id: 3, time: "Jul 23, 10:31 AM", type: "Match", digit: 7, stake: 50, result: "WIN", profit: 425 },
-    { id: 4, time: "Jul 23, 10:22 AM", type: "Differ", digit: 0, stake: 15, result: "LOSS", profit: -15 },
-    { id: 5, time: "Jul 23, 10:15 AM", type: "Match", digit: 2, stake: 20, result: "WIN", profit: 170 },
-  ];
+  const [trades, setTrades] = useState<any[]>([]);
+  const [balance, setBalance] = useState(0);
 
   useEffect(() => {
-    const getUser = async () => {
+    const loadData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
+      
       if (!user) {
         router.push("/login");
-      } else {
-        setUser(user);
+        return;
       }
+
+      setUser(user);
+
+      // Load balance
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("balance")
+        .eq("id", user.id)
+        .single();
+
+      if (profile) {
+        setBalance(Number(profile.balance) || 0);
+      }
+
+      // Load real trades
+      const { data: tradesData } = await supabase
+        .from("trades")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      setTrades(tradesData || []);
       setLoading(false);
     };
-    getUser();
+
+    loadData();
   }, [router]);
 
   const handleLogout = async () => {
@@ -47,7 +64,7 @@ export default function HistoryPage() {
   const totalTrades = trades.length;
   const wins = trades.filter(t => t.result === "WIN").length;
   const losses = trades.filter(t => t.result === "LOSS").length;
-  const netProfit = trades.reduce((sum, t) => sum + t.profit, 0);
+  const netProfit = trades.reduce((sum, t) => sum + Number(t.profit || 0), 0);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -63,13 +80,14 @@ export default function HistoryPage() {
             <Link href="/trade" className="hover:text-white transition">Trade</Link>
             <Link href="/history" className="text-white">History</Link>
             <Link href="/deposit" className="hover:text-white transition">Deposit</Link>
+            <Link href="/withdraw" className="hover:text-white transition">Withdraw</Link>
             <Link href="/profile" className="hover:text-white transition">Profile</Link>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
               <div className="text-xs text-slate-400">Balance</div>
-              <div className="font-semibold text-green-400">$1,000.00</div>
+              <div className="font-semibold text-green-400">${balance.toFixed(2)}</div>
             </div>
             <button
               onClick={handleLogout}
@@ -82,11 +100,9 @@ export default function HistoryPage() {
       </nav>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-bold">Trade History</h1>
-            <p className="text-slate-400 mt-1">All your past trades in one place</p>
-          </div>
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold">Trade History</h1>
+          <p className="text-slate-400 mt-1">All your past trades in one place</p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -111,38 +127,46 @@ export default function HistoryPage() {
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-950/60 text-slate-400">
-                <tr>
-                  <th className="text-left px-6 py-4 font-medium">Date & Time</th>
-                  <th className="text-left px-6 py-4 font-medium">Type</th>
-                  <th className="text-left px-6 py-4 font-medium">Digit</th>
-                  <th className="text-left px-6 py-4 font-medium">Stake</th>
-                  <th className="text-left px-6 py-4 font-medium">Result</th>
-                  <th className="text-right px-6 py-4 font-medium">Profit/Loss</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {trades.map((trade) => (
-                  <tr key={trade.id} className="hover:bg-slate-800/40 transition">
-                    <td className="px-6 py-4">{trade.time}</td>
-                    <td className="px-6 py-4">{trade.type}</td>
-                    <td className="px-6 py-4">{trade.digit}</td>
-                    <td className="px-6 py-4">${trade.stake.toFixed(2)}</td>
-                    <td className="px-6 py-4">
-                      <span className={trade.result === "WIN" ? "text-green-400 font-medium" : "text-red-400 font-medium"}>
-                        {trade.result}
-                      </span>
-                    </td>
-                    <td className={`px-6 py-4 text-right font-medium ${trade.profit >= 0 ? "text-green-400" : "text-red-400"}`}>
-                      {trade.profit >= 0 ? "+" : ""}${trade.profit.toFixed(2)}
-                    </td>
+          {trades.length === 0 ? (
+            <div className="p-12 text-center text-slate-500">
+              No trades yet. Go to the Trade page to place your first trade.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-950/60 text-slate-400">
+                  <tr>
+                    <th className="text-left px-6 py-4 font-medium">Date & Time</th>
+                    <th className="text-left px-6 py-4 font-medium">Type</th>
+                    <th className="text-left px-6 py-4 font-medium">Digit</th>
+                    <th className="text-left px-6 py-4 font-medium">Stake</th>
+                    <th className="text-left px-6 py-4 font-medium">Result</th>
+                    <th className="text-right px-6 py-4 font-medium">Profit/Loss</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {trades.map((trade) => (
+                    <tr key={trade.id} className="hover:bg-slate-800/40 transition">
+                      <td className="px-6 py-4 text-slate-400">
+                        {new Date(trade.created_at).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 capitalize">{trade.type}</td>
+                      <td className="px-6 py-4">{trade.digit}</td>
+                      <td className="px-6 py-4">${Number(trade.stake).toFixed(2)}</td>
+                      <td className="px-6 py-4">
+                        <span className={trade.result === "WIN" ? "text-green-400 font-medium" : "text-red-400 font-medium"}>
+                          {trade.result}
+                        </span>
+                      </td>
+                      <td className={`px-6 py-4 text-right font-medium ${Number(trade.profit) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {Number(trade.profit) >= 0 ? "+" : ""}${Number(trade.profit).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </main>
     </div>
