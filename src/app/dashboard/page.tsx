@@ -25,7 +25,6 @@ export default function DashboardPage() {
 
       setUser(user);
 
-      // Load real balance
       const { data: profile } = await supabase
         .from("profiles")
         .select("balance, full_name")
@@ -36,7 +35,6 @@ export default function DashboardPage() {
         setBalance(Number(profile.balance) || 0);
       }
 
-      // Load real trades stats
       const { data: trades } = await supabase
         .from("trades")
         .select("result, profit")
@@ -85,6 +83,7 @@ export default function DashboardPage() {
             <Link href="/history" className="hover:text-white transition">History</Link>
             <Link href="/deposit" className="hover:text-white transition">Deposit</Link>
             <Link href="/withdraw" className="hover:text-white transition">Withdraw</Link>
+            <Link href="/transactions" className="hover:text-white transition">Transactions</Link>
             <Link href="/profile" className="hover:text-white transition">Profile</Link>
           </div>
 
