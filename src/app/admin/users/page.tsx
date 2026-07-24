@@ -34,7 +34,6 @@ export default function AdminUsersPage() {
       setUser(session.user);
       setAuthorized(true);
 
-      // Load real users from profiles table
       const { data: profiles, error } = await supabase
         .from("profiles")
         .select("*")
@@ -76,7 +75,7 @@ export default function AdminUsersPage() {
       setUsers(users.map(u => 
         u.id === editingUser.id ? { ...u, balance: editBalance } : u
       ));
-      setMessage(`Balance updated for ${editingUser.full_name || editingUser.email}`);
+      setMessage(`Balance updated for ${editingUser.full_name || "User"}`);
     }
 
     setEditingUser(null);
@@ -156,7 +155,7 @@ export default function AdminUsersPage() {
                 <thead className="bg-slate-950/60 text-slate-400">
                   <tr>
                     <th className="text-left px-6 py-4 font-medium">Name</th>
-                    <th className="text-left px-6 py-4 font-medium">Email / ID</th>
+                    <th className="text-left px-6 py-4 font-medium">ID</th>
                     <th className="text-left px-6 py-4 font-medium">Balance</th>
                     <th className="text-left px-6 py-4 font-medium">Type</th>
                     <th className="text-left px-6 py-4 font-medium">Status</th>
@@ -177,7 +176,7 @@ export default function AdminUsersPage() {
                           {u.full_name || "No name"}
                         </td>
                         <td className="px-6 py-4 text-slate-400 text-xs">
-                          {u.id}
+                          {u.id.slice(0, 8)}...
                         </td>
                         <td className="px-6 py-4 text-green-400 font-medium">
                           ${Number(u.balance || 0).toFixed(2)}
@@ -201,6 +200,12 @@ export default function AdminUsersPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right space-x-3">
+                          <Link 
+                            href={`/admin/users/${u.id}`}
+                            className="text-blue-400 hover:text-blue-300 text-sm font-medium"
+                          >
+                            View
+                          </Link>
                           <button 
                             onClick={() => openEdit(u)} 
                             className="text-blue-400 hover:text-blue-300 text-sm font-medium"
