@@ -30,13 +30,14 @@ export default function AdminWithdrawalsPage() {
       setUser(session.user);
       setAuthorized(true);
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("withdrawals")
-        .select(`
-          *,
-          profiles:user_id (full_name)
-        `)
+        .select("*")
         .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error loading withdrawals:", error);
+      }
 
       setWithdrawals(data || []);
       setLoading(false);
@@ -61,7 +62,6 @@ export default function AdminWithdrawalsPage() {
       return;
     }
 
-    // If approved, deduct from user's balance
     if (newStatus === "approved") {
       const { data: profile } = await supabase
         .from("profiles")
@@ -142,7 +142,7 @@ export default function AdminWithdrawalsPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-950/60 text-slate-400">
                     <tr>
-                      <th className="text-left px-6 py-4 font-medium">User</th>
+                      <th className="text-left px-6 py-4 font-medium">User ID</th>
                       <th className="text-left px-6 py-4 font-medium">Amount</th>
                       <th className="text-left px-6 py-4 font-medium">Method</th>
                       <th className="text-left px-6 py-4 font-medium">Details</th>
@@ -154,9 +154,8 @@ export default function AdminWithdrawalsPage() {
                   <tbody className="divide-y divide-slate-800">
                     {withdrawals.map((w) => (
                       <tr key={w.id} className="hover:bg-slate-800/40 transition">
-                        <td className="px-6 py-4">
-                          <div className="font-medium">{w.profiles?.full_name || "User"}</div>
-                          <div className="text-xs text-slate-400">{w.user_id?.slice(0, 8)}...</div>
+                        <td className="px-6 py-4 text-xs text-slate-400">
+                          {w.user_id?.slice(0, 8)}...
                         </td>
                         <td className="px-6 py-4 font-medium text-red-400">
                           ${Number(w.amount).toFixed(2)}
