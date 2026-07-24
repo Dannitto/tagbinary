@@ -20,7 +20,6 @@ export default function TradePage() {
   const [prices, setPrices] = useState<number[]>([9386.34]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Load user + real balance
   useEffect(() => {
     const loadUserAndBalance = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -31,7 +30,6 @@ export default function TradePage() {
 
       setUser(user);
 
-      // Load real balance from profiles table
       const { data: profile } = await supabase
         .from("profiles")
         .select("balance")
@@ -48,7 +46,6 @@ export default function TradePage() {
     loadUserAndBalance();
   }, [router]);
 
-  // Simulated live price
   useEffect(() => {
     if (loading) return;
     const interval = setInterval(() => {
@@ -67,7 +64,6 @@ export default function TradePage() {
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Chart drawing
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || prices.length < 2) return;
@@ -144,11 +140,9 @@ export default function TradePage() {
     setIsTrading(true);
     setResult("Trade placed... waiting...");
 
-    // Deduct stake immediately
     const newBalance = balance - stake;
     setBalance(newBalance);
 
-    // Update balance in database
     await supabase
       .from("profiles")
       .update({ balance: newBalance })
@@ -170,13 +164,11 @@ export default function TradePage() {
         setResult(`LOSS -$${stake.toFixed(2)}`);
       }
 
-      // Update final balance
       await supabase
         .from("profiles")
         .update({ balance: finalBalance })
         .eq("id", user.id);
 
-      // Save trade to database
       await supabase.from("trades").insert({
         user_id: user.id,
         type: type,
@@ -214,6 +206,7 @@ export default function TradePage() {
               <Link href="/history" className="hover:text-white transition">History</Link>
               <Link href="/deposit" className="hover:text-white transition">Deposit</Link>
               <Link href="/withdraw" className="hover:text-white transition">Withdraw</Link>
+              <Link href="/transactions" className="hover:text-white transition">Transactions</Link>
               <Link href="/profile" className="hover:text-white transition">Profile</Link>
             </div>
           </div>
