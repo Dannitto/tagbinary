@@ -13,18 +13,31 @@ export default function WithdrawPage() {
   const [method, setMethod] = useState("mpesa");
   const [accountDetails, setAccountDetails] = useState("");
   const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [balance, setBalance] = useState(0);
 
   useEffect(() => {
-    const getUser = async () => {
+    const loadUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.push("/login");
-      } else {
-        setUser(user);
+        return;
       }
+      setUser(user);
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("balance")
+        .eq("id", user.id)
+        .single();
+
+      if (profile) {
+        setBalance(Number(profile.balance) || 0);
+      }
+
       setLoading(false);
     };
-    getUser();
+    loadUser();
   }, [router]);
 
   const handleLogout = async () => {
@@ -32,16 +45,41 @@ export default function WithdrawPage() {
     router.push("/login");
   };
 
-  const handleWithdraw = () => {
+  const handleWithdraw = async () => {
+    if (!user) return;
     if (amount < 10) {
       setMessage("Minimum withdrawal is $10");
+      return;
+    }
+    if (amount > balance) {
+      setMessage("Insufficient balance");
       return;
     }
     if (!accountDetails.trim()) {
       setMessage("Please enter your account details");
       return;
     }
-    setMessage(`Withdrawal request of $${amount} via ${method.toUpperCase()} has been submitted. (Demo mode)`);
+
+    setSubmitting(true);
+    setMessage("");
+
+    const { error } = await supabase.from("withdrawals").insert({
+      user_id: user.id,
+      amount: amount,
+      method: method,
+      account_details: accountDetails,
+      status: "pending",
+    });
+
+    if (error) {
+      setMessage("Error submitting withdrawal. Please try again.");
+      console.error(error);
+    } else {
+      setMessage(`Withdrawal request of $${amount} via ${method.toUpperCase()} has been submitted. Waiting for admin approval.`);
+      setAccountDetails("");
+    }
+
+    setSubmitting(false);
   };
 
   if (loading) {
@@ -73,7 +111,7 @@ export default function WithdrawPage() {
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
               <div className="text-xs text-slate-400">Balance</div>
-              <div className="font-semibold text-green-400">$1,000.00</div>
+              <div className="font-semibold text-green-400">${balance.toFixed(2)}</div>
             </div>
             <button
               onClick={handleLogout}
@@ -100,9 +138,12 @@ export default function WithdrawPage() {
             value={amount}
             onChange={(e) => setAmount(Number(e.target.value))}
             min={10}
+            max={balance}
             className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-lg font-semibold focus:outline-none focus:border-blue-500"
           />
-          <p className="text-xs text-slate-500 mt-2">Minimum withdrawal: $10 • Available: $1,000.00</p>
+          <p className="text-xs text-slate-500 mt-2">
+            Minimum: $10 • Available: ${balance.toFixed(2)}
+          </p>
         </div>
 
         <div className="space-y-4 mb-6">
@@ -154,9 +195,10 @@ export default function WithdrawPage() {
 
         <button
           onClick={handleWithdraw}
-          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-4 rounded-xl text-lg transition"
+          disabled={submitting}
+          className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl text-lg transition"
         >
-          Submit Withdrawal Request
+          {submitting ? "Submitting..." : "Submit Withdrawal Request"}
         </button>
 
         {message && (
