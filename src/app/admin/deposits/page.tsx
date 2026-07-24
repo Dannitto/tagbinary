@@ -10,16 +10,13 @@ export default function AdminDepositsPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
+  const [deposits, setDeposits] = useState<any[]>([]);
+  const [message, setMessage] = useState("");
 
   const ADMIN_EMAIL = "adamsocialsapp@gmail.com";
 
-  const deposits = [
-    { id: 1, user: "Adam Essays", email: "adamsocialsapp@gmail.com", amount: 100, method: "M-Pesa", status: "Pending", date: "Jul 23, 2026 14:20" },
-    { id: 2, user: "Adam Essays", email: "adamsocialsapp@gmail.com", amount: 50, method: "Card", status: "Approved", date: "Jul 23, 2026 12:05" },
-  ];
-
   useEffect(() => {
-    const checkAdmin = async () => {
+    const loadData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.replace("/login");
@@ -29,11 +26,35 @@ export default function AdminDepositsPage() {
         router.replace("/dashboard");
         return;
       }
+
       setUser(session.user);
       setAuthorized(true);
+
+      // Load real deposits
+      const { data, error } = await supabase
+        .from("deposits")
+        .select(`
+          *,
+          profiles:user_id (full_name)
+        `)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error(error);
+        // Fallback if join fails
+        const { data: simpleData } = await supabase
+          .from("deposits")
+          .select("*")
+          .order("created_at", { ascending: false });
+        setDeposits(simpleData || []);
+      } else {
+        setDeposits(data || []);
+      }
+
       setLoading(false);
     };
-    checkAdmin();
+
+    loadData();
   }, [router]);
 
   const handleLogout = async () => {
@@ -41,8 +62,50 @@ export default function AdminDepositsPage() {
     router.push("/login");
   };
 
+  const updateStatus = async (id: string, newStatus: string, userId: string, amount: number) => {
+    // Update deposit status
+    const { error } = await supabase
+      .from("deposits")
+      .update({ status: newStatus })
+      .eq("id", id);
+
+    if (error) {
+      setMessage("Error updating status");
+      return;
+    }
+
+    // If approved, add money to user's balance
+    if (newStatus === "approved") {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("balance")
+        .eq("id", userId)
+        .single();
+
+      if (profile) {
+        const newBalance = Number(profile.balance) + Number(amount);
+        await supabase
+          .from("profiles")
+          .update({ balance: newBalance })
+          .eq("id", userId);
+      }
+    }
+
+    // Update local state
+    setDeposits(deposits.map(d => 
+      d.id === id ? { ...d, status: newStatus } : d
+    ));
+
+    setMessage(`Deposit ${newStatus}`);
+    setTimeout(() => setMessage(""), 3000);
+  };
+
   if (loading) {
-    return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Checking admin access...</div>;
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+        Loading deposits...
+      </div>
+    );
   }
 
   if (!authorized) return null;
@@ -71,48 +134,89 @@ export default function AdminDepositsPage() {
       <div className="flex-1 flex flex-col">
         <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
           <h1 className="text-xl font-bold">Deposits Management</h1>
-          <div className="text-sm text-slate-400">Logged in as <span className="text-white">{user?.email}</span></div>
+          <div className="text-sm text-slate-400">
+            Logged in as <span className="text-white">{user?.email}</span>
+          </div>
         </header>
+
         <main className="p-6">
+          {message && (
+            <div className="mb-4 bg-green-900/30 border border-green-700 text-green-400 rounded-xl px-4 py-3 text-sm">
+              {message}
+            </div>
+          )}
+
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-950/60 text-slate-400">
-                <tr>
-                  <th className="text-left px-6 py-4">User</th>
-                  <th className="text-left px-6 py-4">Amount</th>
-                  <th className="text-left px-6 py-4">Method</th>
-                  <th className="text-left px-6 py-4">Status</th>
-                  <th className="text-left px-6 py-4">Date</th>
-                  <th className="text-right px-6 py-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {deposits.map((d) => (
-                  <tr key={d.id} className="hover:bg-slate-800/40">
-                    <td className="px-6 py-4">
-                      <div className="font-medium">{d.user}</div>
-                      <div className="text-xs text-slate-400">{d.email}</div>
-                    </td>
-                    <td className="px-6 py-4 text-green-400">${d.amount}</td>
-                    <td className="px-6 py-4">{d.method}</td>
-                    <td className="px-6 py-4">
-                      <span className={`text-xs px-2.5 py-1 rounded-full ${d.status === "Approved" ? "bg-green-500/10 text-green-400" : "bg-yellow-500/10 text-yellow-400"}`}>
-                        {d.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-slate-400">{d.date}</td>
-                    <td className="px-6 py-4 text-right space-x-3">
-                      {d.status === "Pending" && (
-                        <>
-                          <button className="text-green-400 text-sm">Approve</button>
-                          <button className="text-red-400 text-sm">Reject</button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {deposits.length === 0 ? (
+              <div className="p-12 text-center text-slate-500">
+                No deposit requests yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-950/60 text-slate-400">
+                    <tr>
+                      <th className="text-left px-6 py-4 font-medium">User</th>
+                      <th className="text-left px-6 py-4 font-medium">Amount</th>
+                      <th className="text-left px-6 py-4 font-medium">Method</th>
+                      <th className="text-left px-6 py-4 font-medium">Status</th>
+                      <th className="text-left px-6 py-4 font-medium">Date</th>
+                      <th className="text-right px-6 py-4 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {deposits.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-800/40 transition">
+                        <td className="px-6 py-4">
+                          <div className="font-medium">
+                            {d.profiles?.full_name || "User"}
+                          </div>
+                          <div className="text-xs text-slate-400">{d.user_id?.slice(0, 8)}...</div>
+                        </td>
+                        <td className="px-6 py-4 font-medium text-green-400">
+                          ${Number(d.amount).toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 capitalize">{d.method}</td>
+                        <td className="px-6 py-4">
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                            d.status === "approved" 
+                              ? "bg-green-500/10 text-green-400" 
+                              : d.status === "rejected"
+                              ? "bg-red-500/10 text-red-400"
+                              : "bg-yellow-500/10 text-yellow-400"
+                          }`}>
+                            {d.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-slate-400">
+                          {new Date(d.created_at).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 text-right space-x-3">
+                          {d.status === "pending" ? (
+                            <>
+                              <button
+                                onClick={() => updateStatus(d.id, "approved", d.user_id, d.amount)}
+                                className="text-green-400 hover:text-green-300 text-sm font-medium"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => updateStatus(d.id, "rejected", d.user_id, d.amount)}
+                                className="text-red-400 hover:text-red-300 text-sm font-medium"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-slate-500 text-sm">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </main>
       </div>
