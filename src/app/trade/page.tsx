@@ -56,55 +56,74 @@ export default function TradePage() {
   useEffect(() => {
     if (loading) return;
 
+    let reconnectTimeout: any;
+
     const connectDeriv = () => {
-      const ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
-      wsRef.current = ws;
+      try {
+        const ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
+        wsRef.current = ws;
 
-      ws.onopen = () => {
-        setConnectionStatus("Live");
-        // Subscribe to Volatility 10 Index ticks
-        ws.send(JSON.stringify({
-          ticks: "R_10",
-          subscribe: 1
-        }));
-      };
+        ws.onopen = () => {
+          console.log("Deriv WebSocket connected");
+          setConnectionStatus("Live");
 
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+          // Subscribe to Volatility 10 Index
+          ws.send(JSON.stringify({
+            ticks: "R_10",
+            subscribe: 1
+          }));
+        };
 
-        if (data.tick) {
-          const newPrice = data.tick.quote;
-          setLastPrice((prev) => (prev === 0 ? newPrice : price));
-          setPrice(newPrice);
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            console.log("Deriv message:", data);
 
-          const digit = Math.floor(newPrice) % 10;
-          setDigitCounts((old) => {
-            const updated = [...old];
-            updated[digit] += 1;
-            return updated;
-          });
+            if (data.msg_type === "tick" && data.tick) {
+              const newPrice = Number(data.tick.quote);
+              
+              setPrice((prev) => {
+                setLastPrice(prev || newPrice);
+                return newPrice;
+              });
 
-          setPrices((old) => {
-            const updated = [...old, newPrice];
-            if (updated.length > 80) updated.shift();
-            return updated;
-          });
-        }
+              const digit = Math.floor(newPrice) % 10;
+              setDigitCounts((old) => {
+                const updated = [...old];
+                updated[digit] += 1;
+                return updated;
+              });
 
-        if (data.error) {
-          console.error("Deriv error:", data.error);
+              setPrices((old) => {
+                const updated = [...old, newPrice];
+                if (updated.length > 80) updated.shift();
+                return updated;
+              });
+            }
+
+            if (data.error) {
+              console.error("Deriv API Error:", data.error);
+              setConnectionStatus("Error");
+            }
+          } catch (err) {
+            console.error("Error parsing Deriv message:", err);
+          }
+        };
+
+        ws.onclose = () => {
+          console.log("Deriv WebSocket closed");
+          setConnectionStatus("Reconnecting...");
+          reconnectTimeout = setTimeout(connectDeriv, 4000);
+        };
+
+        ws.onerror = (err) => {
+          console.error("Deriv WebSocket error:", err);
           setConnectionStatus("Error");
-        }
-      };
-
-      ws.onclose = () => {
-        setConnectionStatus("Reconnecting...");
-        setTimeout(connectDeriv, 3000);
-      };
-
-      ws.onerror = () => {
-        setConnectionStatus("Connection error");
-      };
+        };
+      } catch (err) {
+        console.error("Failed to create WebSocket:", err);
+        setConnectionStatus("Error");
+      }
     };
 
     connectDeriv();
@@ -112,6 +131,9 @@ export default function TradePage() {
     return () => {
       if (wsRef.current) {
         wsRef.current.close();
+      }
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
       }
     };
   }, [loading]);
@@ -242,7 +264,6 @@ export default function TradePage() {
 
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-100">
-      {/* Header */}
       <header className="border-b border-slate-800/80 bg-[#0B1120]/95 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -308,7 +329,6 @@ export default function TradePage() {
 
       <main className="max-w-7xl mx-auto px-4 py-4">
         <div className="grid lg:grid-cols-3 gap-4">
-          {/* Chart Section */}
           <div className="lg:col-span-2 space-y-3">
             <div className="flex items-end justify-between">
               <div>
@@ -327,7 +347,6 @@ export default function TradePage() {
               <canvas ref={canvasRef} className="w-full h-[260px] sm:h-[360px]" />
             </div>
 
-            {/* Digit Frequency */}
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-3">
               <div className="text-[10px] text-slate-400 mb-2 uppercase tracking-wider">Digit Frequency</div>
               <div className="grid grid-cols-10 gap-1">
@@ -351,7 +370,6 @@ export default function TradePage() {
             </div>
           </div>
 
-          {/* Trading Panel */}
           <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col">
             <div className="flex gap-1 mb-4 bg-slate-950 rounded-xl p-1">
               <button
