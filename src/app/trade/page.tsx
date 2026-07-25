@@ -94,7 +94,7 @@ export default function TradePage() {
 
     const w = rect.width;
     const h = rect.height;
-    const rightPadding = 58; // space for price labels
+    const rightPadding = 58;
 
     ctx.clearRect(0, 0, w, h);
 
@@ -102,7 +102,7 @@ export default function TradePage() {
     const max = Math.max(...prices) + 2;
     const range = max - min || 1;
 
-    // Horizontal grid + price labels on the right
+    // Grid + price labels
     ctx.strokeStyle = "rgba(255,255,255,0.04)";
     ctx.fillStyle = "#64748b";
     ctx.font = "11px system-ui";
@@ -132,7 +132,7 @@ export default function TradePage() {
     });
     ctx.stroke();
 
-    // Current price marker (small colored dot)
+    // Current price marker
     const lastY = h - ((prices[prices.length - 1] - min) / range) * (h * 0.85) - h * 0.08;
     const markerColor = lastDigit % 2 === 0 ? "#22c55e" : "#ef4444";
 
@@ -248,33 +248,39 @@ export default function TradePage() {
             </div>
           </div>
 
-          {/* Chart with price scale */}
+          {/* Chart */}
           <div ref={containerRef} className="flex-1 bg-[#12161f] rounded-xl border border-white/5 relative min-h-[200px]">
             <canvas ref={canvasRef} className="w-full h-full" />
           </div>
 
-          {/* Digit circles - dark style like the video */}
+          {/* Digit circles */}
           <div className="mt-3 flex justify-between items-end px-1">
             {digitStats.map((stat, digit) => {
               const isCurrent = digit === lastDigit;
+              const isEven = digit % 2 === 0;
 
               return (
                 <div key={digit} className="flex flex-col items-center flex-1 relative">
-                  {/* Small orange arrow under current digit */}
                   {isCurrent && (
-                    <div className="absolute -top-2 text-orange-400 text-[10px] leading-none">▼</div>
+                    <div className="absolute -top-2.5 text-orange-400 text-[10px] leading-none">▼</div>
                   )}
 
                   <div
                     className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[11px] font-medium border transition-all
                       ${isCurrent
-                        ? "bg-slate-700 border-cyan-400 text-white ring-1 ring-cyan-400/50"
+                        ? isEven
+                          ? "bg-green-600 border-green-400 text-white ring-2 ring-green-400/40 scale-110"
+                          : "bg-red-600 border-red-400 text-white ring-2 ring-red-400/40 scale-110"
                         : "bg-slate-800/80 border-slate-700 text-slate-300"
                       }`}
                   >
                     {digit}
                   </div>
-                  <div className={`text-[9px] mt-1 ${isCurrent ? "text-cyan-400" : "text-slate-500"}`}>
+                  <div className={`text-[9px] mt-1 ${
+                    isCurrent
+                      ? isEven ? "text-green-400" : "text-red-400"
+                      : "text-slate-500"
+                  }`}>
                     {stat.toFixed(1)}%
                   </div>
                 </div>
@@ -336,22 +342,27 @@ export default function TradePage() {
               <span className="font-semibold text-green-400">${(stake * 1.95).toFixed(2)}</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-1">
+            {/* Strong Green / Red buttons */}
+            <div className="grid grid-cols-2 gap-3 pt-2">
               <button
                 onClick={() => placeTrade("even")}
                 disabled={isTrading || stake > balance}
-                className={`py-3.5 rounded-xl font-semibold text-base transition ${
-                  isTrading && direction === "even" ? "bg-green-700" : "bg-green-600 hover:bg-green-500"
-                } disabled:opacity-50`}
+                className={`py-4 rounded-xl font-bold text-base transition-all shadow-lg ${
+                  isTrading && direction === "even"
+                    ? "bg-green-700 shadow-green-900/40"
+                    : "bg-green-600 hover:bg-green-500 shadow-green-900/30"
+                } disabled:opacity-50 disabled:shadow-none`}
               >
                 Even
               </button>
               <button
                 onClick={() => placeTrade("odd")}
                 disabled={isTrading || stake > balance}
-                className={`py-3.5 rounded-xl font-semibold text-base transition ${
-                  isTrading && direction === "odd" ? "bg-red-700" : "bg-red-600 hover:bg-red-500"
-                } disabled:opacity-50`}
+                className={`py-4 rounded-xl font-bold text-base transition-all shadow-lg ${
+                  isTrading && direction === "odd"
+                    ? "bg-red-700 shadow-red-900/40"
+                    : "bg-red-600 hover:bg-red-500 shadow-red-900/30"
+                } disabled:opacity-50 disabled:shadow-none`}
               >
                 Odd
               </button>
