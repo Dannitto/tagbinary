@@ -106,7 +106,7 @@ export default function UserDetailPage() {
 
     if (!error) {
       setProfile({ ...profile, house_edge: newValue });
-      setMessage(newValue ? "House Edge enabled (user loses 90%)" : "House Edge disabled (fair odds)");
+      setMessage(newValue ? "House Edge ON – User wins 90%" : "House Edge OFF – User never wins");
       setTimeout(() => setMessage(""), 3000);
     }
   };
@@ -248,14 +248,14 @@ export default function UserDetailPage() {
                 <div className="font-medium">House Edge</div>
                 <div className="text-xs text-slate-400 mt-0.5">
                   {profile.house_edge !== false 
-                    ? "ON – User loses ~90% of trades" 
-                    : "OFF – Fair odds (50/50)"}
+                    ? "ON – User wins 90% of trades" 
+                    : "OFF – User never wins"}
                 </div>
               </div>
               <button
                 onClick={toggleHouseEdge}
                 className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${
-                  profile.house_edge !== false ? "bg-red-600" : "bg-slate-600"
+                  profile.house_edge !== false ? "bg-green-600" : "bg-slate-600"
                 }`}
               >
                 <span
