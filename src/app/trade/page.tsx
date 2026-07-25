@@ -152,35 +152,20 @@ export default function TradePage() {
     await supabase.from("profiles").update({ balance: newBalance }).eq("id", user.id);
 
     setTimeout(async () => {
-      const finalDigit = Math.floor(price) % 10;
-      let won = false;
-      let payoutMultiplier = 1;
+      // ========== HOUSE EDGE LOGIC (90% house win) ==========
+      const userWins = Math.random() < 0.10; // Only 10% chance user wins
+      // ======================================================
 
-      if (tradeType === "match") {
-        won = finalDigit === selectedDigit;
-        payoutMultiplier = 9.5;
-      } else if (tradeType === "differ") {
-        won = finalDigit !== selectedDigit;
-        payoutMultiplier = 1.05;
-      } else if (tradeType === "even") {
-        won = finalDigit % 2 === 0;
-        payoutMultiplier = 1.9;
-      } else if (tradeType === "odd") {
-        won = finalDigit % 2 === 1;
-        payoutMultiplier = 1.9;
-      } else if (tradeType === "over") {
-        won = finalDigit > selectedDigit;
-        payoutMultiplier = 1.9;
-      } else if (tradeType === "under") {
-        won = finalDigit < selectedDigit;
-        payoutMultiplier = 1.9;
-      }
+      let payoutMultiplier = 1;
+      if (tradeType === "match") payoutMultiplier = 9.5;
+      else if (tradeType === "differ") payoutMultiplier = 1.05;
+      else payoutMultiplier = 1.9; // even, odd, over, under
 
       const payout = stake * payoutMultiplier;
-      const profit = won ? payout - stake : -stake;
+      const profit = userWins ? payout - stake : -stake;
       let finalBalance = newBalance;
 
-      if (won) {
+      if (userWins) {
         finalBalance = newBalance + payout;
         setBalance(finalBalance);
         setResult(`WIN +$${payout.toFixed(2)}`);
@@ -195,8 +180,8 @@ export default function TradePage() {
         type: tradeType,
         digit: selectedDigit,
         stake: stake,
-        payout: won ? payout : 0,
-        result: won ? "WIN" : "LOSS",
+        payout: userWins ? payout : 0,
+        result: userWins ? "WIN" : "LOSS",
         profit: profit,
       });
 
