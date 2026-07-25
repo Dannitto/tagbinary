@@ -18,6 +18,7 @@ export default function TradePage() {
   const [isTrading, setIsTrading] = useState(false);
   const [result, setResult] = useState("");
   const [prices, setPrices] = useState<number[]>([9386.34]);
+  const [digitCounts, setDigitCounts] = useState<number[]>(Array(10).fill(0));
   const [tradeType, setTradeType] = useState<"match" | "differ" | "even" | "odd" | "over" | "under">("match");
   const [activeTab, setActiveTab] = useState<"match-differ" | "even-odd" | "over-under">("match-differ");
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -43,7 +44,7 @@ export default function TradePage() {
     loadUserAndBalance();
   }, [router]);
 
-  // Simulated price
+  // Simulated price + digit counting
   useEffect(() => {
     if (loading) return;
     const interval = setInterval(() => {
@@ -51,6 +52,14 @@ export default function TradePage() {
         const change = (Math.random() - 0.5) * 1.4;
         const newPrice = Math.round((prev + change) * 100) / 100;
         setLastPrice(prev);
+
+        const digit = Math.floor(newPrice) % 10;
+        setDigitCounts((old) => {
+          const updated = [...old];
+          updated[digit] += 1;
+          return updated;
+        });
+
         setPrices((old) => {
           const updated = [...old, newPrice];
           if (updated.length > 100) updated.shift();
@@ -79,7 +88,6 @@ export default function TradePage() {
     const height = rect.height;
     ctx.clearRect(0, 0, width, height);
 
-    // Grid
     ctx.strokeStyle = "rgba(148, 163, 184, 0.05)";
     ctx.lineWidth = 1;
     for (let i = 1; i < 6; i++) {
@@ -202,10 +210,10 @@ export default function TradePage() {
 
   const lastDigit = Math.floor(price) % 10;
   const isUp = price >= lastPrice;
+  const totalDigits = digitCounts.reduce((a, b) => a + b, 0) || 1;
 
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-100">
-      {/* Header */}
       <header className="border-b border-slate-800/80 bg-[#0B1120]/90 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-5 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-8">
@@ -241,7 +249,7 @@ export default function TradePage() {
 
       <main className="max-w-7xl mx-auto px-5 py-6">
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Chart Section */}
+          {/* Chart + Digit Bars */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-end justify-between">
               <div>
@@ -257,13 +265,35 @@ export default function TradePage() {
             </div>
 
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-xl shadow-black/20">
-              <canvas ref={canvasRef} className="w-full h-[420px]" />
+              <canvas ref={canvasRef} className="w-full h-[380px]" />
+            </div>
+
+            {/* Digit Probability Bars */}
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4">
+              <div className="text-xs text-slate-400 mb-3 font-medium uppercase tracking-wider">Digit Frequency</div>
+              <div className="grid grid-cols-10 gap-2">
+                {digitCounts.map((count, d) => {
+                  const percent = ((count / totalDigits) * 100).toFixed(1);
+                  const isCurrent = d === lastDigit;
+                  return (
+                    <div key={d} className="flex flex-col items-center">
+                      <div className={`w-full h-16 bg-slate-800 rounded-lg relative overflow-hidden ${isCurrent ? "ring-2 ring-blue-500" : ""}`}>
+                        <div
+                          className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${isCurrent ? "bg-blue-500" : "bg-blue-600/60"}`}
+                          style={{ height: `${Math.min(100, Number(percent) * 3)}%` }}
+                        />
+                      </div>
+                      <div className={`text-sm font-bold mt-1.5 ${isCurrent ? "text-blue-400" : "text-slate-300"}`}>{d}</div>
+                      <div className="text-[10px] text-slate-500">{percent}%</div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
           {/* Right Trading Panel */}
           <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-xl shadow-black/20 flex flex-col">
-            {/* Tabs */}
             <div className="flex gap-1 mb-5 bg-slate-950 rounded-xl p-1">
               <button
                 onClick={() => { setActiveTab("match-differ"); setTradeType("match"); }}
@@ -285,7 +315,6 @@ export default function TradePage() {
               </button>
             </div>
 
-            {/* Stake */}
             <div className="mb-5">
               <label className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-2 block">Stake</label>
               <div className="flex items-center gap-2 mb-2">
@@ -311,7 +340,6 @@ export default function TradePage() {
               </div>
             </div>
 
-            {/* Digit Selector (for Match/Differ and Over/Under) */}
             {(activeTab === "match-differ" || activeTab === "over-under") && (
               <div className="mb-5">
                 <label className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-2 block">Select Digit</label>
@@ -331,7 +359,6 @@ export default function TradePage() {
               </div>
             )}
 
-            {/* Action Buttons */}
             <div className="space-y-2.5 mt-auto">
               {activeTab === "match-differ" && (
                 <>
