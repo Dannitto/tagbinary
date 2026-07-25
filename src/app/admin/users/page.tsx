@@ -150,7 +150,7 @@ export default function AdminUsersPage() {
       <aside className="w-64 bg-slate-900 border-r border-slate-800 hidden md:flex flex-col">
         <div className="p-6 border-b border-slate-800 flex items-center gap-2">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white">T</div>
-          <span className="text-lg font-bold">TagBinary</span>
+          <span className="text-lg font-bold">tagforex</span>
         </div>
 
         <nav className="flex-1 p-4 space-y-1 text-sm">
