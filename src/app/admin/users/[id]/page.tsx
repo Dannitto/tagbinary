@@ -38,7 +38,6 @@ export default function UserDetailPage() {
       setAdmin(session.user);
       setAuthorized(true);
 
-      // Load user profile
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
@@ -50,7 +49,6 @@ export default function UserDetailPage() {
         setEditBalance(Number(profileData.balance) || 0);
       }
 
-      // Load user trades
       const { data: tradesData } = await supabase
         .from("trades")
         .select("*")
@@ -95,6 +93,20 @@ export default function UserDetailPage() {
     if (!error) {
       setProfile({ ...profile, is_banned: newStatus });
       setMessage(newStatus ? "User banned" : "User unbanned");
+      setTimeout(() => setMessage(""), 3000);
+    }
+  };
+
+  const toggleHouseEdge = async () => {
+    const newValue = !profile.house_edge;
+    const { error } = await supabase
+      .from("profiles")
+      .update({ house_edge: newValue })
+      .eq("id", userId);
+
+    if (!error) {
+      setProfile({ ...profile, house_edge: newValue });
+      setMessage(newValue ? "House Edge enabled (user loses 90%)" : "House Edge disabled (fair odds)");
       setTimeout(() => setMessage(""), 3000);
     }
   };
@@ -228,6 +240,30 @@ export default function UserDetailPage() {
                   {new Date(profile.created_at).toLocaleDateString()}
                 </div>
               </div>
+            </div>
+
+            {/* House Edge Toggle */}
+            <div className="mt-6 flex items-center justify-between bg-slate-950 rounded-xl px-5 py-4">
+              <div>
+                <div className="font-medium">House Edge</div>
+                <div className="text-xs text-slate-400 mt-0.5">
+                  {profile.house_edge !== false 
+                    ? "ON – User loses ~90% of trades" 
+                    : "OFF – Fair odds (50/50)"}
+                </div>
+              </div>
+              <button
+                onClick={toggleHouseEdge}
+                className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${
+                  profile.house_edge !== false ? "bg-red-600" : "bg-slate-600"
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
+                    profile.house_edge !== false ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
             </div>
           </div>
 
