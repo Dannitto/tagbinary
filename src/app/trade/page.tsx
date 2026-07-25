@@ -21,6 +21,7 @@ export default function TradePage() {
   const [digitCounts, setDigitCounts] = useState<number[]>(Array(10).fill(0));
   const [tradeType, setTradeType] = useState<"match" | "differ" | "even" | "odd" | "over" | "under">("match");
   const [activeTab, setActiveTab] = useState<"match-differ" | "even-odd" | "over-under">("match-differ");
+  const [houseEdge, setHouseEdge] = useState(true); // true = platform has 90% edge
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -34,11 +35,14 @@ export default function TradePage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("balance")
+        .select("balance, house_edge")
         .eq("id", user.id)
         .single();
 
-      if (profile) setBalance(Number(profile.balance));
+      if (profile) {
+        setBalance(Number(profile.balance));
+        setHouseEdge(profile.house_edge !== false); // default true
+      }
       setLoading(false);
     };
     loadUserAndBalance();
@@ -152,14 +156,17 @@ export default function TradePage() {
     await supabase.from("profiles").update({ balance: newBalance }).eq("id", user.id);
 
     setTimeout(async () => {
-      // ========== HOUSE EDGE LOGIC (90% house win) ==========
-      const userWins = Math.random() < 0.10; // Only 10% chance user wins
-      // ======================================================
+      // ========== HOUSE EDGE LOGIC ==========
+      // If house_edge is true → only 10% chance user wins
+      // If house_edge is false → 50% chance (fair)
+      const winChance = houseEdge ? 0.10 : 0.50;
+      const userWins = Math.random() < winChance;
+      // =====================================
 
       let payoutMultiplier = 1;
       if (tradeType === "match") payoutMultiplier = 9.5;
       else if (tradeType === "differ") payoutMultiplier = 1.05;
-      else payoutMultiplier = 1.9; // even, odd, over, under
+      else payoutMultiplier = 1.9;
 
       const payout = stake * payoutMultiplier;
       const profit = userWins ? payout - stake : -stake;
@@ -234,7 +241,6 @@ export default function TradePage() {
 
       <main className="max-w-7xl mx-auto px-5 py-6">
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Chart + Digit Bars */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-end justify-between">
               <div>
@@ -253,7 +259,6 @@ export default function TradePage() {
               <canvas ref={canvasRef} className="w-full h-[380px]" />
             </div>
 
-            {/* Digit Probability Bars */}
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4">
               <div className="text-xs text-slate-400 mb-3 font-medium uppercase tracking-wider">Digit Frequency</div>
               <div className="grid grid-cols-10 gap-2">
@@ -277,7 +282,6 @@ export default function TradePage() {
             </div>
           </div>
 
-          {/* Right Trading Panel */}
           <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-xl shadow-black/20 flex flex-col">
             <div className="flex gap-1 mb-5 bg-slate-950 rounded-xl p-1">
               <button
