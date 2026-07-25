@@ -11,20 +11,23 @@ export default function TradePage() {
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const [price, setPrice] = useState(9386.34);
-  const [lastPrice, setLastPrice] = useState(9386.34);
+  const [price, setPrice] = useState(0);
+  const [lastPrice, setLastPrice] = useState(0);
   const [selectedDigit, setSelectedDigit] = useState(5);
   const [stake, setStake] = useState(10);
   const [balance, setBalance] = useState(1000);
   const [isTrading, setIsTrading] = useState(false);
   const [result, setResult] = useState("");
-  const [prices, setPrices] = useState<number[]>([9386.34]);
+  const [prices, setPrices] = useState<number[]>([]);
   const [digitCounts, setDigitCounts] = useState<number[]>(Array(10).fill(0));
   const [tradeType, setTradeType] = useState<"match" | "differ" | "even" | "odd" | "over" | "under">("match");
   const [activeTab, setActiveTab] = useState<"match-differ" | "even-odd" | "over-under">("match-differ");
   const [houseEdge, setHouseEdge] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState("Connecting...");
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
+  // Load user + balance
   useEffect(() => {
     const loadUserAndBalance = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -49,32 +52,71 @@ export default function TradePage() {
     loadUserAndBalance();
   }, [router]);
 
+  // Connect to Deriv WebSocket
   useEffect(() => {
     if (loading) return;
-    const interval = setInterval(() => {
-      setPrice((prev) => {
-        const change = (Math.random() - 0.5) * 1.4;
-        const newPrice = Math.round((prev + change) * 100) / 100;
-        setLastPrice(prev);
 
-        const digit = Math.floor(newPrice) % 10;
-        setDigitCounts((old) => {
-          const updated = [...old];
-          updated[digit] += 1;
-          return updated;
-        });
+    const connectDeriv = () => {
+      const ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
+      wsRef.current = ws;
 
-        setPrices((old) => {
-          const updated = [...old, newPrice];
-          if (updated.length > 80) updated.shift();
-          return updated;
-        });
-        return newPrice;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
+      ws.onopen = () => {
+        setConnectionStatus("Live");
+        // Subscribe to Volatility 10 Index ticks
+        ws.send(JSON.stringify({
+          ticks: "R_10",
+          subscribe: 1
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.tick) {
+          const newPrice = data.tick.quote;
+          setLastPrice((prev) => (prev === 0 ? newPrice : price));
+          setPrice(newPrice);
+
+          const digit = Math.floor(newPrice) % 10;
+          setDigitCounts((old) => {
+            const updated = [...old];
+            updated[digit] += 1;
+            return updated;
+          });
+
+          setPrices((old) => {
+            const updated = [...old, newPrice];
+            if (updated.length > 80) updated.shift();
+            return updated;
+          });
+        }
+
+        if (data.error) {
+          console.error("Deriv error:", data.error);
+          setConnectionStatus("Error");
+        }
+      };
+
+      ws.onclose = () => {
+        setConnectionStatus("Reconnecting...");
+        setTimeout(connectDeriv, 3000);
+      };
+
+      ws.onerror = () => {
+        setConnectionStatus("Connection error");
+      };
+    };
+
+    connectDeriv();
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
   }, [loading]);
 
+  // Chart
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || prices.length < 2) return;
@@ -101,8 +143,8 @@ export default function TradePage() {
       ctx.stroke();
     }
 
-    const min = Math.min(...prices) - 0.8;
-    const max = Math.max(...prices) + 0.8;
+    const min = Math.min(...prices) - 0.5;
+    const max = Math.max(...prices) + 0.5;
     const range = max - min || 1;
 
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
@@ -141,7 +183,7 @@ export default function TradePage() {
   };
 
   const placeTrade = async () => {
-    if (isTrading || !user) return;
+    if (isTrading || !user || price === 0) return;
     if (stake > balance) {
       setResult("Insufficient balance");
       return;
@@ -194,7 +236,7 @@ export default function TradePage() {
     return <div className="min-h-screen bg-[#0B1120] text-white flex items-center justify-center">Loading...</div>;
   }
 
-  const lastDigit = Math.floor(price) % 10;
+  const lastDigit = price > 0 ? Math.floor(price) % 10 : 0;
   const isUp = price >= lastPrice;
   const totalDigits = digitCounts.reduce((a, b) => a + b, 0) || 1;
 
@@ -237,13 +279,20 @@ export default function TradePage() {
               <div className="text-[10px] text-slate-500 uppercase">Balance</div>
               <div className="font-semibold text-emerald-400 text-sm">${balance.toFixed(2)}</div>
             </div>
+            <div className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${
+              connectionStatus === "Live" 
+                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                : "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${connectionStatus === "Live" ? "bg-emerald-400 animate-pulse" : "bg-yellow-400"}`}></span>
+              {connectionStatus}
+            </div>
             <button onClick={handleLogout} className="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-2 rounded-lg">
               Logout
             </button>
           </div>
         </div>
 
-        {/* Mobile Menu */}
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-slate-800 bg-slate-900 px-4 py-3 space-y-2">
             <Link href="/dashboard" className="block py-2 text-sm" onClick={() => setMobileMenuOpen(false)}>Dashboard</Link>
@@ -263,9 +312,9 @@ export default function TradePage() {
           <div className="lg:col-span-2 space-y-3">
             <div className="flex items-end justify-between">
               <div>
-                <div className="text-xs text-slate-400 mb-0.5">Volatility 10 (1s) Index</div>
+                <div className="text-xs text-slate-400 mb-0.5">Volatility 10 Index</div>
                 <div className={`text-3xl sm:text-4xl font-bold ${isUp ? "text-emerald-400" : "text-rose-400"}`}>
-                  {price.toFixed(2)}
+                  {price > 0 ? price.toFixed(2) : "—"}
                 </div>
               </div>
               <div className="text-right">
@@ -278,7 +327,7 @@ export default function TradePage() {
               <canvas ref={canvasRef} className="w-full h-[260px] sm:h-[360px]" />
             </div>
 
-            {/* Digit Bars - Mobile friendly */}
+            {/* Digit Frequency */}
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-3">
               <div className="text-[10px] text-slate-400 mb-2 uppercase tracking-wider">Digit Frequency</div>
               <div className="grid grid-cols-10 gap-1">
@@ -304,7 +353,6 @@ export default function TradePage() {
 
           {/* Trading Panel */}
           <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col">
-            {/* Tabs */}
             <div className="flex gap-1 mb-4 bg-slate-950 rounded-xl p-1">
               <button
                 onClick={() => { setActiveTab("match-differ"); setTradeType("match"); }}
@@ -326,25 +374,24 @@ export default function TradePage() {
               </button>
             </div>
 
-            {/* Stake */}
             <div className="mb-4">
               <label className="text-[10px] text-slate-400 uppercase tracking-wider mb-1.5 block">Stake</label>
               <div className="flex items-center gap-2 mb-2">
-                <button onClick={() => setStake(Math.max(1, stake - 5))} className="w-11 h-11 bg-slate-800 rounded-xl text-lg font-medium border border-slate-700 active:scale-95">−</button>
+                <button onClick={() => setStake(Math.max(1, stake - 5))} className="w-11 h-11 bg-slate-800 rounded-xl text-lg font-medium border border-slate-700">−</button>
                 <input
                   type="number"
                   value={stake}
                   onChange={(e) => setStake(Number(e.target.value) || 1)}
                   className="flex-1 bg-slate-950 border border-slate-700 rounded-xl text-center py-2.5 text-lg font-semibold focus:outline-none focus:border-blue-500"
                 />
-                <button onClick={() => setStake(stake + 5)} className="w-11 h-11 bg-slate-800 rounded-xl text-lg font-medium border border-slate-700 active:scale-95">+</button>
+                <button onClick={() => setStake(stake + 5)} className="w-11 h-11 bg-slate-800 rounded-xl text-lg font-medium border border-slate-700">+</button>
               </div>
               <div className="grid grid-cols-5 gap-1.5">
                 {[1, 5, 10, 25, 50].map((v) => (
                   <button
                     key={v}
                     onClick={() => setStake(v)}
-                    className={`py-2 text-xs rounded-lg font-medium active:scale-95 ${stake === v ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 border border-slate-700"}`}
+                    className={`py-2 text-xs rounded-lg font-medium ${stake === v ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 border border-slate-700"}`}
                   >
                     ${v}
                   </button>
@@ -352,7 +399,6 @@ export default function TradePage() {
               </div>
             </div>
 
-            {/* Digit Selector */}
             {(activeTab === "match-differ" || activeTab === "over-under") && (
               <div className="mb-4">
                 <label className="text-[10px] text-slate-400 uppercase tracking-wider mb-1.5 block">Select Digit</label>
@@ -361,7 +407,7 @@ export default function TradePage() {
                     <button
                       key={d}
                       onClick={() => setSelectedDigit(d)}
-                      className={`py-2.5 rounded-xl text-sm font-semibold active:scale-95 ${
+                      className={`py-2.5 rounded-xl text-sm font-semibold ${
                         selectedDigit === d ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 border border-slate-700"
                       }`}
                     >
@@ -372,22 +418,21 @@ export default function TradePage() {
               </div>
             )}
 
-            {/* Action Buttons */}
             <div className="space-y-2.5 mt-auto">
               {activeTab === "match-differ" && (
                 <>
                   <button
                     onClick={() => { setTradeType("match"); placeTrade(); }}
-                    disabled={isTrading}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
+                    disabled={isTrading || price === 0}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
                   >
                     <span>Match</span>
                     <span className="text-emerald-100 text-sm">850%</span>
                   </button>
                   <button
                     onClick={() => { setTradeType("differ"); placeTrade(); }}
-                    disabled={isTrading}
-                    className="w-full bg-rose-600 hover:bg-rose-500 active:scale-[0.98] disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
+                    disabled={isTrading || price === 0}
+                    className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
                   >
                     <span>Differ</span>
                     <span className="text-rose-100 text-sm">5%</span>
@@ -399,16 +444,16 @@ export default function TradePage() {
                 <>
                   <button
                     onClick={() => { setTradeType("even"); placeTrade(); }}
-                    disabled={isTrading}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
+                    disabled={isTrading || price === 0}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
                   >
                     <span>Even</span>
                     <span className="text-emerald-100 text-sm">90%</span>
                   </button>
                   <button
                     onClick={() => { setTradeType("odd"); placeTrade(); }}
-                    disabled={isTrading}
-                    className="w-full bg-rose-600 hover:bg-rose-500 active:scale-[0.98] disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
+                    disabled={isTrading || price === 0}
+                    className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
                   >
                     <span>Odd</span>
                     <span className="text-rose-100 text-sm">90%</span>
@@ -420,16 +465,16 @@ export default function TradePage() {
                 <>
                   <button
                     onClick={() => { setTradeType("over"); placeTrade(); }}
-                    disabled={isTrading}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
+                    disabled={isTrading || price === 0}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
                   >
                     <span>Over {selectedDigit}</span>
                     <span className="text-emerald-100 text-sm">90%</span>
                   </button>
                   <button
                     onClick={() => { setTradeType("under"); placeTrade(); }}
-                    disabled={isTrading}
-                    className="w-full bg-rose-600 hover:bg-rose-500 active:scale-[0.98] disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
+                    disabled={isTrading || price === 0}
+                    className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
                   >
                     <span>Under {selectedDigit}</span>
                     <span className="text-rose-100 text-sm">90%</span>
