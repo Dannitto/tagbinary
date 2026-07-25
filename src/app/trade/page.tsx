@@ -11,19 +11,25 @@ export default function TradePage() {
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const [price, setPrice] = useState(9385.50);
-  const [lastPrice, setLastPrice] = useState(9385.50);
+  const [price, setPrice] = useState(0);
+  const [lastPrice, setLastPrice] = useState(0);
   const [selectedDigit, setSelectedDigit] = useState(5);
   const [stake, setStake] = useState(10);
   const [balance, setBalance] = useState(1000);
   const [isTrading, setIsTrading] = useState(false);
   const [result, setResult] = useState("");
-  const [prices, setPrices] = useState<number[]>([9385.50]);
+  const [prices, setPrices] = useState<number[]>([]);
   const [digitCounts, setDigitCounts] = useState<number[]>(Array(10).fill(0));
   const [tradeType, setTradeType] = useState<"match" | "differ" | "even" | "odd" | "over" | "under">("match");
   const [activeTab, setActiveTab] = useState<"match-differ" | "even-odd" | "over-under">("match-differ");
   const [houseEdge, setHouseEdge] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState("Connecting...");
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // Your Deriv credentials
+  const DERIV_APP_ID = "33VDdSfhp6NFwAyI1J4H3";
+  const DERIV_TOKEN = "pat_06e5b31759e4227e5b28f4d5800f0647a7f3fac3c6329048c0c48ea069b840d5";
 
   useEffect(() => {
     const loadUserAndBalance = async () => {
@@ -49,35 +55,103 @@ export default function TradePage() {
     loadUserAndBalance();
   }, [router]);
 
-  // Simulated Volatility 10 data
+  // Connect to Deriv with your credentials
   useEffect(() => {
     if (loading) return;
 
-    const interval = setInterval(() => {
-      setPrice((prev) => {
-        const change = (Math.random() - 0.5) * 1.8;
-        const newPrice = Math.round((prev + change) * 100) / 100;
+    let reconnectTimeout: any;
 
-        setLastPrice(prev);
+    const connectDeriv = () => {
+      try {
+        const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${DERIV_APP_ID}`);
+        wsRef.current = ws;
 
-        const digit = Math.floor(newPrice) % 10;
-        setDigitCounts((old) => {
-          const updated = [...old];
-          updated[digit] += 1;
-          return updated;
-        });
+        ws.onopen = () => {
+          console.log("Deriv WebSocket connected");
+          setConnectionStatus("Authorizing...");
 
-        setPrices((old) => {
-          const updated = [...old, newPrice];
-          if (updated.length > 80) updated.shift();
-          return updated;
-        });
+          // Authorize with your token
+          ws.send(JSON.stringify({
+            authorize: DERIV_TOKEN
+          }));
+        };
 
-        return newPrice;
-      });
-    }, 1000);
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            console.log("Deriv message:", data);
 
-    return () => clearInterval(interval);
+            // After successful authorization, subscribe to ticks
+            if (data.msg_type === "authorize") {
+              if (data.error) {
+                console.error("Authorize error:", data.error);
+                setConnectionStatus("Auth Error");
+                return;
+              }
+              console.log("Authorized successfully");
+              setConnectionStatus("Live");
+
+              // Subscribe to Volatility 10 Index
+              ws.send(JSON.stringify({
+                ticks: "R_10",
+                subscribe: 1
+              }));
+            }
+
+            // Handle tick data
+            if (data.msg_type === "tick" && data.tick) {
+              const newPrice = Number(data.tick.quote);
+
+              setPrice((prev) => {
+                setLastPrice(prev || newPrice);
+                return newPrice;
+              });
+
+              const digit = Math.floor(newPrice) % 10;
+              setDigitCounts((old) => {
+                const updated = [...old];
+                updated[digit] += 1;
+                return updated;
+              });
+
+              setPrices((old) => {
+                const updated = [...old, newPrice];
+                if (updated.length > 80) updated.shift();
+                return updated;
+              });
+            }
+
+            if (data.error) {
+              console.error("Deriv API Error:", data.error);
+              setConnectionStatus("Error");
+            }
+          } catch (err) {
+            console.error("Error parsing message:", err);
+          }
+        };
+
+        ws.onclose = () => {
+          console.log("WebSocket closed");
+          setConnectionStatus("Reconnecting...");
+          reconnectTimeout = setTimeout(connectDeriv, 4000);
+        };
+
+        ws.onerror = (err) => {
+          console.error("WebSocket error:", err);
+          setConnectionStatus("Error");
+        };
+      } catch (err) {
+        console.error("Failed to create WebSocket:", err);
+        setConnectionStatus("Error");
+      }
+    };
+
+    connectDeriv();
+
+    return () => {
+      if (wsRef.current) wsRef.current.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    };
   }, [loading]);
 
   // Chart
@@ -147,7 +221,7 @@ export default function TradePage() {
   };
 
   const placeTrade = async () => {
-    if (isTrading || !user) return;
+    if (isTrading || !user || price === 0) return;
     if (stake > balance) {
       setResult("Insufficient balance");
       return;
@@ -200,11 +274,9 @@ export default function TradePage() {
     return <div className="min-h-screen bg-[#0B1120] text-white flex items-center justify-center">Loading...</div>;
   }
 
-  const lastDigit = Math.floor(price) % 10;
+  const lastDigit = price > 0 ? Math.floor(price) % 10 : 0;
   const isUp = price >= lastPrice;
   const totalDigits = digitCounts.reduce((a, b) => a + b, 0) || 1;
-
-  // Calculate average for colour markers
   const avg = totalDigits / 10;
 
   return (
@@ -245,9 +317,13 @@ export default function TradePage() {
               <div className="text-[10px] text-slate-500 uppercase">Balance</div>
               <div className="font-semibold text-emerald-400 text-sm">${balance.toFixed(2)}</div>
             </div>
-            <div className="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 text-xs font-semibold px-2.5 py-1 rounded-full border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
-              LIVE
+            <div className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${
+              connectionStatus === "Live" 
+                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                : "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${connectionStatus === "Live" ? "bg-emerald-400 animate-pulse" : "bg-yellow-400"}`}></span>
+              {connectionStatus}
             </div>
             <button onClick={handleLogout} className="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-2 rounded-lg">
               Logout
@@ -275,7 +351,7 @@ export default function TradePage() {
               <div>
                 <div className="text-xs text-slate-400 mb-0.5">Volatility 10 Index</div>
                 <div className={`text-3xl sm:text-4xl font-bold ${isUp ? "text-emerald-400" : "text-rose-400"}`}>
-                  {price.toFixed(2)}
+                  {price > 0 ? price.toFixed(2) : "—"}
                 </div>
               </div>
               <div className="text-right">
@@ -288,7 +364,7 @@ export default function TradePage() {
               <canvas ref={canvasRef} className="w-full h-[260px] sm:h-[360px]" />
             </div>
 
-            {/* Digit Statistics - styled like the video */}
+            {/* Digit Statistics */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl px-3 py-4">
               <div className="flex justify-between items-end gap-1">
                 {digitCounts.map((count, d) => {
@@ -299,24 +375,13 @@ export default function TradePage() {
 
                   return (
                     <div key={d} className="flex flex-col items-center flex-1 relative">
-                      {/* Coloured marker (like the video) */}
-                      {isCurrent && (
-                        <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-orange-400"></div>
-                      )}
-                      {isHot && !isCurrent && (
-                        <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-emerald-400"></div>
-                      )}
-                      {isCold && !isCurrent && (
-                        <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-rose-400"></div>
-                      )}
+                      {isCurrent && <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-orange-400"></div>}
+                      {isHot && !isCurrent && <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-emerald-400"></div>}
+                      {isCold && !isCurrent && <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-rose-400"></div>}
 
-                      <div
-                        className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                          isCurrent
-                            ? "bg-blue-600 text-white scale-110 shadow-lg shadow-blue-600/30"
-                            : "bg-slate-800 text-slate-300"
-                        }`}
-                      >
+                      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                        isCurrent ? "bg-blue-600 text-white scale-110 shadow-lg shadow-blue-600/30" : "bg-slate-800 text-slate-300"
+                      }`}>
                         {d}
                       </div>
                       <div className={`text-[10px] sm:text-[11px] mt-1.5 font-medium ${
@@ -334,47 +399,21 @@ export default function TradePage() {
           {/* Trading Panel */}
           <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col">
             <div className="flex gap-1 mb-4 bg-slate-950 rounded-xl p-1">
-              <button
-                onClick={() => { setActiveTab("match-differ"); setTradeType("match"); }}
-                className={`flex-1 py-2.5 text-[11px] sm:text-xs font-semibold rounded-lg transition ${activeTab === "match-differ" ? "bg-blue-600 text-white" : "text-slate-400"}`}
-              >
-                MATCH/DIFFER
-              </button>
-              <button
-                onClick={() => { setActiveTab("even-odd"); setTradeType("even"); }}
-                className={`flex-1 py-2.5 text-[11px] sm:text-xs font-semibold rounded-lg transition ${activeTab === "even-odd" ? "bg-blue-600 text-white" : "text-slate-400"}`}
-              >
-                EVEN/ODD
-              </button>
-              <button
-                onClick={() => { setActiveTab("over-under"); setTradeType("over"); }}
-                className={`flex-1 py-2.5 text-[11px] sm:text-xs font-semibold rounded-lg transition ${activeTab === "over-under" ? "bg-blue-600 text-white" : "text-slate-400"}`}
-              >
-                OVER/UNDER
-              </button>
+              <button onClick={() => { setActiveTab("match-differ"); setTradeType("match"); }} className={`flex-1 py-2.5 text-[11px] sm:text-xs font-semibold rounded-lg transition ${activeTab === "match-differ" ? "bg-blue-600 text-white" : "text-slate-400"}`}>MATCH/DIFFER</button>
+              <button onClick={() => { setActiveTab("even-odd"); setTradeType("even"); }} className={`flex-1 py-2.5 text-[11px] sm:text-xs font-semibold rounded-lg transition ${activeTab === "even-odd" ? "bg-blue-600 text-white" : "text-slate-400"}`}>EVEN/ODD</button>
+              <button onClick={() => { setActiveTab("over-under"); setTradeType("over"); }} className={`flex-1 py-2.5 text-[11px] sm:text-xs font-semibold rounded-lg transition ${activeTab === "over-under" ? "bg-blue-600 text-white" : "text-slate-400"}`}>OVER/UNDER</button>
             </div>
 
             <div className="mb-4">
               <label className="text-[10px] text-slate-400 uppercase tracking-wider mb-1.5 block">Stake</label>
               <div className="flex items-center gap-2 mb-2">
                 <button onClick={() => setStake(Math.max(1, stake - 5))} className="w-11 h-11 bg-slate-800 rounded-xl text-lg font-medium border border-slate-700">−</button>
-                <input
-                  type="number"
-                  value={stake}
-                  onChange={(e) => setStake(Number(e.target.value) || 1)}
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl text-center py-2.5 text-lg font-semibold focus:outline-none focus:border-blue-500"
-                />
+                <input type="number" value={stake} onChange={(e) => setStake(Number(e.target.value) || 1)} className="flex-1 bg-slate-950 border border-slate-700 rounded-xl text-center py-2.5 text-lg font-semibold focus:outline-none focus:border-blue-500" />
                 <button onClick={() => setStake(stake + 5)} className="w-11 h-11 bg-slate-800 rounded-xl text-lg font-medium border border-slate-700">+</button>
               </div>
               <div className="grid grid-cols-5 gap-1.5">
                 {[1, 5, 10, 25, 50].map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setStake(v)}
-                    className={`py-2 text-xs rounded-lg font-medium ${stake === v ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 border border-slate-700"}`}
-                  >
-                    ${v}
-                  </button>
+                  <button key={v} onClick={() => setStake(v)} className={`py-2 text-xs rounded-lg font-medium ${stake === v ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 border border-slate-700"}`}>${v}</button>
                 ))}
               </div>
             </div>
@@ -384,15 +423,7 @@ export default function TradePage() {
                 <label className="text-[10px] text-slate-400 uppercase tracking-wider mb-1.5 block">Select Digit</label>
                 <div className="grid grid-cols-5 gap-1.5">
                   {[0,1,2,3,4,5,6,7,8,9].map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => setSelectedDigit(d)}
-                      className={`py-2.5 rounded-xl text-sm font-semibold ${
-                        selectedDigit === d ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 border border-slate-700"
-                      }`}
-                    >
-                      {d}
-                    </button>
+                    <button key={d} onClick={() => setSelectedDigit(d)} className={`py-2.5 rounded-xl text-sm font-semibold ${selectedDigit === d ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 border border-slate-700"}`}>{d}</button>
                   ))}
                 </div>
               </div>
@@ -401,75 +432,27 @@ export default function TradePage() {
             <div className="space-y-2.5 mt-auto">
               {activeTab === "match-differ" && (
                 <>
-                  <button
-                    onClick={() => { setTradeType("match"); placeTrade(); }}
-                    disabled={isTrading}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
-                  >
-                    <span>Match</span>
-                    <span className="text-emerald-100 text-sm">850%</span>
-                  </button>
-                  <button
-                    onClick={() => { setTradeType("differ"); placeTrade(); }}
-                    disabled={isTrading}
-                    className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
-                  >
-                    <span>Differ</span>
-                    <span className="text-rose-100 text-sm">5%</span>
-                  </button>
+                  <button onClick={() => { setTradeType("match"); placeTrade(); }} disabled={isTrading || price === 0} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Match</span><span className="text-emerald-100 text-sm">850%</span></button>
+                  <button onClick={() => { setTradeType("differ"); placeTrade(); }} disabled={isTrading || price === 0} className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Differ</span><span className="text-rose-100 text-sm">5%</span></button>
                 </>
               )}
-
               {activeTab === "even-odd" && (
                 <>
-                  <button
-                    onClick={() => { setTradeType("even"); placeTrade(); }}
-                    disabled={isTrading}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
-                  >
-                    <span>Even</span>
-                    <span className="text-emerald-100 text-sm">90%</span>
-                  </button>
-                  <button
-                    onClick={() => { setTradeType("odd"); placeTrade(); }}
-                    disabled={isTrading}
-                    className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
-                  >
-                    <span>Odd</span>
-                    <span className="text-rose-100 text-sm">90%</span>
-                  </button>
+                  <button onClick={() => { setTradeType("even"); placeTrade(); }} disabled={isTrading || price === 0} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Even</span><span className="text-emerald-100 text-sm">90%</span></button>
+                  <button onClick={() => { setTradeType("odd"); placeTrade(); }} disabled={isTrading || price === 0} className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Odd</span><span className="text-rose-100 text-sm">90%</span></button>
                 </>
               )}
-
               {activeTab === "over-under" && (
                 <>
-                  <button
-                    onClick={() => { setTradeType("over"); placeTrade(); }}
-                    disabled={isTrading}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
-                  >
-                    <span>Over {selectedDigit}</span>
-                    <span className="text-emerald-100 text-sm">90%</span>
-                  </button>
-                  <button
-                    onClick={() => { setTradeType("under"); placeTrade(); }}
-                    disabled={isTrading}
-                    className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"
-                  >
-                    <span>Under {selectedDigit}</span>
-                    <span className="text-rose-100 text-sm">90%</span>
-                  </button>
+                  <button onClick={() => { setTradeType("over"); placeTrade(); }} disabled={isTrading || price === 0} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Over {selectedDigit}</span><span className="text-emerald-100 text-sm">90%</span></button>
+                  <button onClick={() => { setTradeType("under"); placeTrade(); }} disabled={isTrading || price === 0} className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Under {selectedDigit}</span><span className="text-rose-100 text-sm">90%</span></button>
                 </>
               )}
             </div>
 
             {result && (
               <div className={`mt-3 text-center text-sm font-medium py-3 rounded-xl ${
-                result.includes("WIN") 
-                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
-                  : result.includes("LOSS") 
-                    ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" 
-                    : "bg-slate-800 text-slate-400"
+                result.includes("WIN") ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : result.includes("LOSS") ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" : "bg-slate-800 text-slate-400"
               }`}>
                 {result}
               </div>
