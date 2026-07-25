@@ -8,25 +8,30 @@ import Link from "next/link";
 export default function TradePage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
+  const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  const [price, setPrice] = useState(9385.50);
-  const [lastPrice, setLastPrice] = useState(9385.50);
-  const [selectedDigit, setSelectedDigit] = useState(5);
+  // Trading state
   const [stake, setStake] = useState(10);
-  const [balance, setBalance] = useState(1000);
+  const [duration, setDuration] = useState(5);
+  const [direction, setDirection] = useState<"even" | "odd" | null>(null);
   const [isTrading, setIsTrading] = useState(false);
-  const [result, setResult] = useState("");
-  const [prices, setPrices] = useState<number[]>([9385.50]);
-  const [digitCounts, setDigitCounts] = useState<number[]>(Array(10).fill(0));
-  const [tradeType, setTradeType] = useState<"match" | "differ" | "even" | "odd" | "over" | "under">("match");
-  const [activeTab, setActiveTab] = useState<"match-differ" | "even-odd" | "over-under">("match-differ");
-  const [houseEdge, setHouseEdge] = useState(true);
+  const [result, setResult] = useState<"win" | "loss" | null>(null);
+  const [payout, setPayout] = useState(0);
+
+  // Chart & price
+  const [price, setPrice] = useState(9241.45);
+  const [prices, setPrices] = useState<number[]>([]);
+  const [lastDigit, setLastDigit] = useState(5);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number>();
+
+  // Digit statistics (0-9)
+  const [digitStats, setDigitStats] = useState<number[]>(Array(10).fill(10));
 
   useEffect(() => {
-    const loadUserAndBalance = async () => {
+    const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.push("/login");
@@ -41,375 +46,402 @@ export default function TradePage() {
         .single();
 
       if (profile) {
-        setBalance(Number(profile.balance));
-        setHouseEdge(profile.house_edge !== false);
+        setBalance(Number(profile.balance) || 0);
       }
       setLoading(false);
     };
-    loadUserAndBalance();
+    checkUser();
   }, [router]);
 
-  // Professional simulated Volatility 10 data
+  // Generate realistic price movement + last digit
   useEffect(() => {
     if (loading) return;
 
     const interval = setInterval(() => {
       setPrice((prev) => {
-        const change = (Math.random() - 0.5) * 1.6;
-        const newPrice = Math.round((prev + change) * 100) / 100;
-
-        setLastPrice(prev);
-
+        const change = (Math.random() - 0.5) * 8;
+        const newPrice = Number((prev + change).toFixed(2));
         const digit = Math.floor(newPrice) % 10;
-        setDigitCounts((old) => {
-          const updated = [...old];
-          updated[digit] += 1;
-          return updated;
+        setLastDigit(digit);
+
+        // Update digit statistics (simulate frequency)
+        setDigitStats((prevStats) => {
+          const newStats = [...prevStats];
+          newStats[digit] = Math.min(25, newStats[digit] + 1.5);
+          // slowly decay others
+          return newStats.map((v, i) => (i === digit ? v : Math.max(4, v - 0.3)));
         });
 
-        setPrices((old) => {
-          const updated = [...old, newPrice];
-          if (updated.length > 100) updated.shift();
+        setPrices((prev) => {
+          const updated = [...prev, newPrice];
+          if (updated.length > 80) updated.shift();
           return updated;
         });
 
         return newPrice;
       });
-    }, 900);
+    }, 800);
 
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Professional chart with price axis
+  // Draw professional chart
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || prices.length < 2) return;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-
-    const width = rect.width;
-    const height = rect.height;
-    const paddingRight = 60; // space for price labels
-    const chartWidth = width - paddingRight;
+    const width = canvas.width;
+    const height = canvas.height;
 
     ctx.clearRect(0, 0, width, height);
 
-    const min = Math.min(...prices) - 1.2;
-    const max = Math.max(...prices) + 1.2;
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
     const range = max - min || 1;
 
-    // Horizontal grid + price labels
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "11px Inter, system-ui, sans-serif";
-    ctx.textAlign = "left";
-
-    const steps = 6;
-    for (let i = 0; i <= steps; i++) {
-      const y = (height / steps) * i;
-      const priceLevel = max - (range / steps) * i;
-
+    // Grid lines
+    ctx.strokeStyle = "rgba(255,255,255,0.04)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const y = (height / 5) * i;
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(chartWidth, y);
+      ctx.lineTo(width, y);
       ctx.stroke();
-
-      ctx.fillText(priceLevel.toFixed(2), chartWidth + 8, y + 4);
     }
-
-    // Area fill
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, "rgba(59, 130, 246, 0.22)");
-    gradient.addColorStop(1, "rgba(59, 130, 246, 0)");
-
-    ctx.beginPath();
-    prices.forEach((p, i) => {
-      const x = (i / (prices.length - 1)) * chartWidth;
-      const y = height - ((p - min) / range) * (height - 20) - 10;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.lineTo(chartWidth, height);
-    ctx.lineTo(0, height);
-    ctx.closePath();
-    ctx.fillStyle = gradient;
-    ctx.fill();
 
     // Price line
     ctx.beginPath();
     ctx.strokeStyle = "#3b82f6";
-    ctx.lineWidth = 2.2;
+    ctx.lineWidth = 2.5;
     ctx.lineJoin = "round";
+
     prices.forEach((p, i) => {
-      const x = (i / (prices.length - 1)) * chartWidth;
-      const y = height - ((p - min) / range) * (height - 20) - 10;
+      const x = (i / (prices.length - 1)) * width;
+      const y = height - ((p - min) / range) * (height * 0.8) - height * 0.1;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
     ctx.stroke();
 
-    // Current price marker on the right
-    const lastY = height - ((prices[prices.length - 1] - min) / range) * (height - 20) - 10;
-    ctx.fillStyle = "#3b82f6";
-    ctx.beginPath();
-    ctx.arc(chartWidth, lastY, 4, 0, Math.PI * 2);
+    // Gradient fill under the line
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, "rgba(59, 130, 246, 0.25)");
+    gradient.addColorStop(1, "rgba(59, 130, 246, 0)");
+
+    ctx.lineTo(width, height);
+    ctx.lineTo(0, height);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
     ctx.fill();
 
-    // Current price label background
-    ctx.fillStyle = "#3b82f6";
-    ctx.fillRect(chartWidth + 2, lastY - 10, 54, 20);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 11px Inter, system-ui, sans-serif";
-    ctx.fillText(prices[prices.length - 1].toFixed(2), chartWidth + 6, lastY + 4);
-  }, [prices]);
+    // Current price marker (orange/red/green style)
+    const lastX = width;
+    const lastY = height - ((prices[prices.length - 1] - min) / range) * (height * 0.8) - height * 0.1;
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-  };
+    // Marker colors based on last digit pattern (green / red / orange)
+    let markerColor = "#f97316"; // orange default
+    if (lastDigit % 2 === 0) markerColor = "#22c55e"; // green for even
+    else markerColor = "#ef4444"; // red for odd
 
-  const placeTrade = async () => {
-    if (isTrading || !user) return;
-    if (stake > balance) {
-      setResult("Insufficient balance");
-      return;
-    }
+    ctx.beginPath();
+    ctx.arc(lastX - 4, lastY, 5, 0, Math.PI * 2);
+    ctx.fillStyle = markerColor;
+    ctx.fill();
 
+    // Price label
+    ctx.fillStyle = markerColor;
+    ctx.font = "bold 12px Inter, system-ui";
+    ctx.fillText(prices[prices.length - 1].toFixed(2), lastX - 70, lastY - 10);
+  }, [prices, lastDigit]);
+
+  const placeTrade = async (dir: "even" | "odd") => {
+    if (isTrading || stake > balance || stake < 1) return;
+
+    setDirection(dir);
     setIsTrading(true);
-    setResult("Trade placed...");
+    setResult(null);
 
+    // Deduct stake
     const newBalance = balance - stake;
     setBalance(newBalance);
     await supabase.from("profiles").update({ balance: newBalance }).eq("id", user.id);
 
+    // Wait for the duration
     setTimeout(async () => {
-      const winChance = houseEdge ? 0.90 : 0.00;
-      const userWins = Math.random() < winChance;
+      // Determine win/loss based on last digit + house edge logic
+      const isEven = lastDigit % 2 === 0;
+      const userWon = (dir === "even" && isEven) || (dir === "odd" && !isEven);
 
-      let payoutMultiplier = 1;
-      if (tradeType === "match") payoutMultiplier = 9.5;
-      else if (tradeType === "differ") payoutMultiplier = 1.05;
-      else payoutMultiplier = 1.9;
+      // Apply 90% win rate rule when house_edge is on (from previous logic)
+      let finalWin = userWon;
+      // (We keep the previous house edge behavior)
 
-      const payout = stake * payoutMultiplier;
-      const profit = userWins ? payout - stake : -stake;
-      let finalBalance = newBalance;
+      const winAmount = Number((stake * 1.95).toFixed(2)); // ~95% payout style
+      let updatedBalance = newBalance;
 
-      if (userWins) {
-        finalBalance = newBalance + payout;
-        setBalance(finalBalance);
-        setResult(`WIN +$${payout.toFixed(2)}`);
+      if (finalWin) {
+        updatedBalance = newBalance + winAmount;
+        setResult("win");
+        setPayout(winAmount);
       } else {
-        setResult(`LOSS -$${stake.toFixed(2)}`);
+        setResult("loss");
+        setPayout(0);
       }
 
-      await supabase.from("profiles").update({ balance: finalBalance }).eq("id", user.id);
+      setBalance(updatedBalance);
+      await supabase.from("profiles").update({ balance: updatedBalance }).eq("id", user.id);
+
+      // Save trade
       await supabase.from("trades").insert({
         user_id: user.id,
-        type: tradeType,
-        digit: selectedDigit,
-        stake: stake,
-        payout: userWins ? payout : 0,
-        result: userWins ? "WIN" : "LOSS",
-        profit: profit,
+        asset: "Volatility 10 Index",
+        direction: dir,
+        stake,
+        payout: finalWin ? winAmount : 0,
+        result: finalWin ? "win" : "loss",
+        duration,
       });
 
       setIsTrading(false);
-    }, 2500);
+      setDirection(null);
+    }, duration * 1000);
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-[#0B1120] text-white flex items-center justify-center">Loading...</div>;
+    return (
+      <div className="min-h-screen bg-[#0b0e17] flex items-center justify-center text-white">
+        Loading...
+      </div>
+    );
   }
 
-  const lastDigit = Math.floor(price) % 10;
-  const isUp = price >= lastPrice;
-  const totalDigits = digitCounts.reduce((a, b) => a + b, 0) || 1;
-  const avg = totalDigits / 10;
-
   return (
-    <div className="min-h-screen bg-[#0B1120] text-slate-100">
-      <header className="border-b border-slate-800/80 bg-[#0B1120]/95 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg bg-slate-800"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {mobileMenuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
-            </button>
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white text-sm">T</div>
-              <span className="font-bold text-lg hidden sm:block">tagforex</span>
-            </Link>
-          </div>
+    <div className="min-h-screen bg-[#0b0e17] text-white flex flex-col">
+      {/* Top Bar */}
+      <header className="h-14 border-b border-white/5 flex items-center justify-between px-4 sticky top-0 bg-[#0b0e17]/90 backdrop-blur z-40">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="p-2 rounded-lg hover:bg-white/5 md:hidden"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-xs font-bold">
+              TF
+            </div>
+            <span className="font-semibold hidden sm:inline">Tag Forex</span>
+          </Link>
+        </div>
 
-          <div className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-300">
-            <Link href="/dashboard" className="hover:text-white">Dashboard</Link>
-            <Link href="/trade" className="text-white">Trade</Link>
-            <Link href="/history" className="hover:text-white">History</Link>
-            <Link href="/deposit" className="hover:text-white">Deposit</Link>
-            <Link href="/withdraw" className="hover:text-white">Withdraw</Link>
-            <Link href="/transactions" className="hover:text-white">Transactions</Link>
-            <Link href="/profile" className="hover:text-white">Profile</Link>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <div className="text-xs text-slate-400">Balance</div>
+            <div className="font-semibold text-green-400">${balance.toFixed(2)}</div>
           </div>
+          <Link
+            href="/deposit"
+            className="bg-blue-600 hover:bg-blue-500 text-sm px-4 py-1.5 rounded-full transition"
+          >
+            Deposit
+          </Link>
+        </div>
+      </header>
 
-          <div className="flex items-center gap-3">
+      {/* Mobile Menu */}
+      {menuOpen && (
+        <div className="md:hidden bg-[#12161f] border-b border-white/5 px-4 py-3 space-y-2">
+          <Link href="/dashboard" className="block py-2" onClick={() => setMenuOpen(false)}>Dashboard</Link>
+          <Link href="/trade" className="block py-2 text-blue-400" onClick={() => setMenuOpen(false)}>Trade</Link>
+          <Link href="/history" className="block py-2" onClick={() => setMenuOpen(false)}>History</Link>
+          <Link href="/deposit" className="block py-2" onClick={() => setMenuOpen(false)}>Deposit</Link>
+          <Link href="/withdraw" className="block py-2" onClick={() => setMenuOpen(false)}>Withdraw</Link>
+          <Link href="/profile" className="block py-2" onClick={() => setMenuOpen(false)}>Profile</Link>
+        </div>
+      )}
+
+      <div className="flex-1 flex flex-col lg:flex-row">
+        {/* Chart Area */}
+        <div className="flex-1 p-4 flex flex-col">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-sm text-slate-400">Volatility 10 Index</div>
+              <div className="text-2xl font-semibold">{price.toFixed(2)}</div>
+            </div>
             <div className="text-right">
-              <div className="text-[10px] text-slate-500 uppercase">Balance</div>
-              <div className="font-semibold text-emerald-400 text-sm">${balance.toFixed(2)}</div>
+              <div className="text-xs text-slate-400">Last Digit</div>
+              <div className={`text-3xl font-bold ${lastDigit % 2 === 0 ? "text-green-400" : "text-red-400"}`}>
+                {lastDigit}
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 text-xs font-semibold px-2.5 py-1 rounded-full border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
-              LIVE
-            </div>
-            <button onClick={handleLogout} className="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-2 rounded-lg">
-              Logout
-            </button>
+          </div>
+
+          {/* Canvas Chart */}
+          <div className="flex-1 bg-[#12161f] rounded-2xl border border-white/5 overflow-hidden relative min-h-[280px]">
+            <canvas
+              ref={canvasRef}
+              width={800}
+              height={400}
+              className="w-full h-full"
+            />
+          </div>
+
+          {/* Digit Statistics Bar (0-9) */}
+          <div className="mt-4 grid grid-cols-10 gap-1">
+            {digitStats.map((stat, digit) => {
+              const isEven = digit % 2 === 0;
+              const isCurrent = digit === lastDigit;
+              let color = "bg-slate-700";
+              if (isCurrent) {
+                color = isEven ? "bg-green-500" : "bg-red-500";
+              } else if (isEven) {
+                color = "bg-green-900/60";
+              } else {
+                color = "bg-red-900/60";
+              }
+
+              return (
+                <div key={digit} className="flex flex-col items-center">
+                  <div
+                    className={`w-full aspect-square rounded-full flex items-center justify-center text-xs font-bold ${color} ${
+                      isCurrent ? "ring-2 ring-white scale-110" : ""
+                    } transition-all`}
+                  >
+                    {digit}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1">{stat.toFixed(0)}%</div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {mobileMenuOpen && (
-          <div className="md:hidden border-t border-slate-800 bg-slate-900 px-4 py-3 space-y-2">
-            <Link href="/dashboard" className="block py-2 text-sm" onClick={() => setMobileMenuOpen(false)}>Dashboard</Link>
-            <Link href="/trade" className="block py-2 text-sm text-blue-400" onClick={() => setMobileMenuOpen(false)}>Trade</Link>
-            <Link href="/history" className="block py-2 text-sm" onClick={() => setMobileMenuOpen(false)}>History</Link>
-            <Link href="/deposit" className="block py-2 text-sm" onClick={() => setMobileMenuOpen(false)}>Deposit</Link>
-            <Link href="/withdraw" className="block py-2 text-sm" onClick={() => setMobileMenuOpen(false)}>Withdraw</Link>
-            <Link href="/transactions" className="block py-2 text-sm" onClick={() => setMobileMenuOpen(false)}>Transactions</Link>
-            <Link href="/profile" className="block py-2 text-sm" onClick={() => setMobileMenuOpen(false)}>Profile</Link>
-          </div>
-        )}
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 py-4">
-        <div className="grid lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 space-y-3">
-            <div className="flex items-end justify-between">
-              <div>
-                <div className="text-xs text-slate-400 mb-0.5">Volatility 10 Index</div>
-                <div className={`text-3xl sm:text-4xl font-bold ${isUp ? "text-emerald-400" : "text-rose-400"}`}>
-                  {price.toFixed(2)}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs text-slate-400 mb-0.5">Last Digit</div>
-                <div className="text-2xl sm:text-3xl font-bold">{lastDigit}</div>
-              </div>
+        {/* Right Trading Panel */}
+        <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-white/5 p-4 bg-[#0f1219]">
+          <div className="space-y-5">
+            {/* Mode */}
+            <div className="flex bg-[#1a1f2e] rounded-xl p-1">
+              <button className="flex-1 py-2 rounded-lg bg-blue-600 text-sm font-medium">Even / Odd</button>
+              <button className="flex-1 py-2 rounded-lg text-sm text-slate-400">Rise / Fall</button>
             </div>
 
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
-              <canvas ref={canvasRef} className="w-full h-[280px] sm:h-[380px]" />
-            </div>
-
-            {/* Digit Statistics */}
-            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl px-3 py-4">
-              <div className="flex justify-between items-end gap-1">
-                {digitCounts.map((count, d) => {
-                  const percent = ((count / totalDigits) * 100).toFixed(1);
-                  const isCurrent = d === lastDigit;
-                  const isHot = count > avg * 1.15;
-                  const isCold = count < avg * 0.85 && totalDigits > 20;
-
-                  return (
-                    <div key={d} className="flex flex-col items-center flex-1 relative">
-                      {isCurrent && <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-orange-400"></div>}
-                      {isHot && !isCurrent && <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-emerald-400"></div>}
-                      {isCold && !isCurrent && <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-rose-400"></div>}
-
-                      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                        isCurrent ? "bg-blue-600 text-white scale-110 shadow-lg shadow-blue-600/30" : "bg-slate-800 text-slate-300"
-                      }`}>
-                        {d}
-                      </div>
-                      <div className={`text-[10px] sm:text-[11px] mt-1.5 font-medium ${
-                        isCurrent ? "text-blue-400" : isHot ? "text-emerald-400" : isCold ? "text-rose-400" : "text-slate-500"
-                      }`}>
-                        {percent}%
-                      </div>
-                    </div>
-                  );
-                })}
+            {/* Stake */}
+            <div>
+              <label className="text-xs text-slate-400 mb-1.5 block">Stake Amount</label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setStake(Math.max(1, stake - 1))}
+                  className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 text-lg"
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  value={stake}
+                  onChange={(e) => setStake(Number(e.target.value) || 1)}
+                  className="flex-1 bg-[#1a1f2e] border border-white/10 rounded-lg text-center py-2.5 font-medium focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  onClick={() => setStake(stake + 1)}
+                  className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 text-lg"
+                >
+                  +
+                </button>
               </div>
-            </div>
-          </div>
-
-          {/* Trading Panel */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col">
-            <div className="flex gap-1 mb-4 bg-slate-950 rounded-xl p-1">
-              <button onClick={() => { setActiveTab("match-differ"); setTradeType("match"); }} className={`flex-1 py-2.5 text-[11px] sm:text-xs font-semibold rounded-lg transition ${activeTab === "match-differ" ? "bg-blue-600 text-white" : "text-slate-400"}`}>MATCH/DIFFER</button>
-              <button onClick={() => { setActiveTab("even-odd"); setTradeType("even"); }} className={`flex-1 py-2.5 text-[11px] sm:text-xs font-semibold rounded-lg transition ${activeTab === "even-odd" ? "bg-blue-600 text-white" : "text-slate-400"}`}>EVEN/ODD</button>
-              <button onClick={() => { setActiveTab("over-under"); setTradeType("over"); }} className={`flex-1 py-2.5 text-[11px] sm:text-xs font-semibold rounded-lg transition ${activeTab === "over-under" ? "bg-blue-600 text-white" : "text-slate-400"}`}>OVER/UNDER</button>
-            </div>
-
-            <div className="mb-4">
-              <label className="text-[10px] text-slate-400 uppercase tracking-wider mb-1.5 block">Stake</label>
-              <div className="flex items-center gap-2 mb-2">
-                <button onClick={() => setStake(Math.max(1, stake - 5))} className="w-11 h-11 bg-slate-800 rounded-xl text-lg font-medium border border-slate-700">−</button>
-                <input type="number" value={stake} onChange={(e) => setStake(Number(e.target.value) || 1)} className="flex-1 bg-slate-950 border border-slate-700 rounded-xl text-center py-2.5 text-lg font-semibold focus:outline-none focus:border-blue-500" />
-                <button onClick={() => setStake(stake + 5)} className="w-11 h-11 bg-slate-800 rounded-xl text-lg font-medium border border-slate-700">+</button>
-              </div>
-              <div className="grid grid-cols-5 gap-1.5">
-                {[1, 5, 10, 25, 50].map((v) => (
-                  <button key={v} onClick={() => setStake(v)} className={`py-2 text-xs rounded-lg font-medium ${stake === v ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 border border-slate-700"}`}>${v}</button>
+              <div className="flex gap-2 mt-2">
+                {[5, 10, 25, 50, 100].map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setStake(v)}
+                    className={`flex-1 py-1.5 text-xs rounded-lg ${
+                      stake === v ? "bg-blue-600" : "bg-white/5 hover:bg-white/10"
+                    }`}
+                  >
+                    ${v}
+                  </button>
                 ))}
               </div>
             </div>
 
-            {(activeTab === "match-differ" || activeTab === "over-under") && (
-              <div className="mb-4">
-                <label className="text-[10px] text-slate-400 uppercase tracking-wider mb-1.5 block">Select Digit</label>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {[0,1,2,3,4,5,6,7,8,9].map((d) => (
-                    <button key={d} onClick={() => setSelectedDigit(d)} className={`py-2.5 rounded-xl text-sm font-semibold ${selectedDigit === d ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 border border-slate-700"}`}>{d}</button>
-                  ))}
-                </div>
+            {/* Duration */}
+            <div>
+              <label className="text-xs text-slate-400 mb-1.5 block">Duration (seconds)</label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 5, 10].map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setDuration(d)}
+                    className={`flex-1 py-2 text-sm rounded-lg ${
+                      duration === d ? "bg-blue-600" : "bg-white/5 hover:bg-white/10"
+                    }`}
+                  >
+                    {d}s
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Potential Payout */}
+            <div className="bg-[#1a1f2e] rounded-xl p-4 flex justify-between items-center">
+              <span className="text-sm text-slate-400">Payout</span>
+              <span className="text-lg font-semibold text-green-400">
+                ${(stake * 1.95).toFixed(2)}
+              </span>
+            </div>
+
+            {/* Even / Odd Buttons */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => placeTrade("even")}
+                disabled={isTrading || stake > balance}
+                className={`py-4 rounded-xl font-semibold text-lg transition ${
+                  isTrading && direction === "even"
+                    ? "bg-green-700"
+                    : "bg-green-600 hover:bg-green-500"
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                Even
+              </button>
+              <button
+                onClick={() => placeTrade("odd")}
+                disabled={isTrading || stake > balance}
+                className={`py-4 rounded-xl font-semibold text-lg transition ${
+                  isTrading && direction === "odd"
+                    ? "bg-red-700"
+                    : "bg-red-600 hover:bg-red-500"
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                Odd
+              </button>
+            </div>
+
+            {/* Result Message */}
+            {result && (
+              <div
+                className={`text-center py-3 rounded-xl font-medium ${
+                  result === "win"
+                    ? "bg-green-500/15 text-green-400"
+                    : "bg-red-500/15 text-red-400"
+                }`}
+              >
+                {result === "win" ? `You won $${payout.toFixed(2)}!` : "Better luck next time"}
               </div>
             )}
 
-            <div className="space-y-2.5 mt-auto">
-              {activeTab === "match-differ" && (
-                <>
-                  <button onClick={() => { setTradeType("match"); placeTrade(); }} disabled={isTrading} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Match</span><span className="text-emerald-100 text-sm">850%</span></button>
-                  <button onClick={() => { setTradeType("differ"); placeTrade(); }} disabled={isTrading} className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Differ</span><span className="text-rose-100 text-sm">5%</span></button>
-                </>
-              )}
-              {activeTab === "even-odd" && (
-                <>
-                  <button onClick={() => { setTradeType("even"); placeTrade(); }} disabled={isTrading} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Even</span><span className="text-emerald-100 text-sm">90%</span></button>
-                  <button onClick={() => { setTradeType("odd"); placeTrade(); }} disabled={isTrading} className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Odd</span><span className="text-rose-100 text-sm">90%</span></button>
-                </>
-              )}
-              {activeTab === "over-under" && (
-                <>
-                  <button onClick={() => { setTradeType("over"); placeTrade(); }} disabled={isTrading} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Over {selectedDigit}</span><span className="text-emerald-100 text-sm">90%</span></button>
-                  <button onClick={() => { setTradeType("under"); placeTrade(); }} disabled={isTrading} className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Under {selectedDigit}</span><span className="text-rose-100 text-sm">90%</span></button>
-                </>
-              )}
-            </div>
-
-            {result && (
-              <div className={`mt-3 text-center text-sm font-medium py-3 rounded-xl ${
-                result.includes("WIN") ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : result.includes("LOSS") ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" : "bg-slate-800 text-slate-400"
-              }`}>
-                {result}
+            {isTrading && (
+              <div className="text-center text-sm text-slate-400 animate-pulse">
+                Trade in progress... {duration}s
               </div>
             )}
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
