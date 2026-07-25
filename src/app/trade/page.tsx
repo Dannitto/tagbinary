@@ -49,13 +49,12 @@ export default function TradePage() {
     loadUserAndBalance();
   }, [router]);
 
-  // High-quality simulated Volatility 10 data
+  // Simulated Volatility 10 data
   useEffect(() => {
     if (loading) return;
 
     const interval = setInterval(() => {
       setPrice((prev) => {
-        // Realistic volatility movement
         const change = (Math.random() - 0.5) * 1.8;
         const newPrice = Math.round((prev + change) * 100) / 100;
 
@@ -286,22 +285,33 @@ export default function TradePage() {
               <canvas ref={canvasRef} className="w-full h-[260px] sm:h-[360px]" />
             </div>
 
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-3">
-              <div className="text-[10px] text-slate-400 mb-2 uppercase tracking-wider">Digit Frequency</div>
-              <div className="grid grid-cols-10 gap-1">
+            {/* Improved Digit Frequency - closer to the video */}
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4">
+              <div className="text-[10px] text-slate-400 mb-3 uppercase tracking-wider text-center">Digit Statistics</div>
+              <div className="flex justify-between gap-1 sm:gap-2">
                 {digitCounts.map((count, d) => {
-                  const percent = ((count / totalDigits) * 100).toFixed(0);
+                  const percent = ((count / totalDigits) * 100).toFixed(1);
                   const isCurrent = d === lastDigit;
+                  const isSelected = d === selectedDigit;
+
                   return (
-                    <div key={d} className="flex flex-col items-center">
-                      <div className={`w-full h-10 sm:h-14 bg-slate-800 rounded-md relative overflow-hidden ${isCurrent ? "ring-1 ring-blue-500" : ""}`}>
-                        <div
-                          className={`absolute bottom-0 left-0 right-0 transition-all ${isCurrent ? "bg-blue-500" : "bg-blue-600/50"}`}
-                          style={{ height: `${Math.min(100, Number(percent) * 2.5)}%` }}
-                        />
+                    <div key={d} className="flex flex-col items-center flex-1">
+                      <div
+                        className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                          isCurrent
+                            ? "bg-blue-600 text-white ring-2 ring-blue-400 scale-110"
+                            : isSelected
+                            ? "bg-slate-700 text-white ring-1 ring-slate-500"
+                            : "bg-slate-800 text-slate-300"
+                        }`}
+                      >
+                        {d}
                       </div>
-                      <div className={`text-xs font-bold mt-1 ${isCurrent ? "text-blue-400" : "text-slate-400"}`}>{d}</div>
-                      <div className="text-[9px] text-slate-500">{percent}%</div>
+                      <div className={`text-[10px] sm:text-xs mt-1.5 font-medium ${
+                        isCurrent ? "text-blue-400" : "text-slate-400"
+                      }`}>
+                        {percent}%
+                      </div>
                     </div>
                   );
                 })}
@@ -309,6 +319,7 @@ export default function TradePage() {
             </div>
           </div>
 
+          {/* Trading Panel */}
           <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col">
             <div className="flex gap-1 mb-4 bg-slate-950 rounded-xl p-1">
               <button
