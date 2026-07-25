@@ -90,7 +90,7 @@ export default function AdminPage() {
           </button>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white text-sm">T</div>
-            <span className="font-bold">TagBinary Admin</span>
+            <span className="font-bold">tagforex Admin</span>
           </div>
         </div>
         <button onClick={handleLogout} className="text-xs bg-slate-800 px-3 py-2 rounded-lg">
@@ -115,7 +115,7 @@ export default function AdminPage() {
       <aside className="w-64 bg-slate-900 border-r border-slate-800 hidden md:flex flex-col">
         <div className="p-6 border-b border-slate-800 flex items-center gap-2">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white">T</div>
-          <span className="text-lg font-bold">TagBinary</span>
+          <span className="text-lg font-bold">tagforex</span>
         </div>
 
         <nav className="flex-1 p-4 space-y-1 text-sm">
@@ -186,7 +186,7 @@ export default function AdminPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
             <h2 className="font-semibold text-lg mb-2">Welcome to the Admin Panel</h2>
             <p className="text-slate-400 text-sm">
-              This is the control center of TagBinary. Use the menu to manage users, trades, deposits, and settings.
+              This is the control center of tagforex. Use the menu to manage users, trades, deposits, and settings.
             </p>
           </div>
         </main>
