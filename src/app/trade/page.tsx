@@ -11,19 +11,18 @@ export default function TradePage() {
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const [price, setPrice] = useState(0);
-  const [lastPrice, setLastPrice] = useState(0);
+  const [price, setPrice] = useState(9385.50);
+  const [lastPrice, setLastPrice] = useState(9385.50);
   const [selectedDigit, setSelectedDigit] = useState(5);
   const [stake, setStake] = useState(10);
   const [balance, setBalance] = useState(1000);
   const [isTrading, setIsTrading] = useState(false);
   const [result, setResult] = useState("");
-  const [prices, setPrices] = useState<number[]>([]);
+  const [prices, setPrices] = useState<number[]>([9385.50]);
   const [digitCounts, setDigitCounts] = useState<number[]>(Array(10).fill(0));
   const [tradeType, setTradeType] = useState<"match" | "differ" | "even" | "odd" | "over" | "under">("match");
   const [activeTab, setActiveTab] = useState<"match-differ" | "even-odd" | "over-under">("match-differ");
   const [houseEdge, setHouseEdge] = useState(true);
-  const [connectionStatus, setConnectionStatus] = useState("Connecting...");
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -50,65 +49,38 @@ export default function TradePage() {
     loadUserAndBalance();
   }, [router]);
 
-  // Connect to our server-side Deriv proxy (SSE)
+  // Professional simulated Volatility 10 data
   useEffect(() => {
     if (loading) return;
 
-    const eventSource = new EventSource("/api/deriv");
+    const interval = setInterval(() => {
+      setPrice((prev) => {
+        const change = (Math.random() - 0.5) * 1.6;
+        const newPrice = Math.round((prev + change) * 100) / 100;
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+        setLastPrice(prev);
 
-        if (data.type === "status") {
-          if (data.status === "connected") {
-            setConnectionStatus("Live");
-          } else {
-            setConnectionStatus("Reconnecting...");
-          }
-        }
+        const digit = Math.floor(newPrice) % 10;
+        setDigitCounts((old) => {
+          const updated = [...old];
+          updated[digit] += 1;
+          return updated;
+        });
 
-        if (data.type === "tick") {
-          const newPrice = Number(data.quote);
+        setPrices((old) => {
+          const updated = [...old, newPrice];
+          if (updated.length > 100) updated.shift();
+          return updated;
+        });
 
-          setPrice((prev) => {
-            setLastPrice(prev || newPrice);
-            return newPrice;
-          });
+        return newPrice;
+      });
+    }, 900);
 
-          const digit = Math.floor(newPrice) % 10;
-          setDigitCounts((old) => {
-            const updated = [...old];
-            updated[digit] += 1;
-            return updated;
-          });
-
-          setPrices((old) => {
-            const updated = [...old, newPrice];
-            if (updated.length > 80) updated.shift();
-            return updated;
-          });
-        }
-
-        if (data.type === "error") {
-          console.error("Deriv proxy error:", data.message);
-          setConnectionStatus("Error");
-        }
-      } catch (err) {
-        console.error("SSE parse error:", err);
-      }
-    };
-
-    eventSource.onerror = () => {
-      setConnectionStatus("Reconnecting...");
-    };
-
-    return () => {
-      eventSource.close();
-    };
+    return () => clearInterval(interval);
   }, [loading]);
 
-  // Chart
+  // Professional chart with price axis
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || prices.length < 2) return;
@@ -123,50 +95,78 @@ export default function TradePage() {
 
     const width = rect.width;
     const height = rect.height;
+    const paddingRight = 60; // space for price labels
+    const chartWidth = width - paddingRight;
+
     ctx.clearRect(0, 0, width, height);
 
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.05)";
-    ctx.lineWidth = 1;
-    for (let i = 1; i < 5; i++) {
-      const y = (height / 5) * i;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
-
-    const min = Math.min(...prices) - 0.8;
-    const max = Math.max(...prices) + 0.8;
+    const min = Math.min(...prices) - 1.2;
+    const max = Math.max(...prices) + 1.2;
     const range = max - min || 1;
 
+    // Horizontal grid + price labels
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "11px Inter, system-ui, sans-serif";
+    ctx.textAlign = "left";
+
+    const steps = 6;
+    for (let i = 0; i <= steps; i++) {
+      const y = (height / steps) * i;
+      const priceLevel = max - (range / steps) * i;
+
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(chartWidth, y);
+      ctx.stroke();
+
+      ctx.fillText(priceLevel.toFixed(2), chartWidth + 8, y + 4);
+    }
+
+    // Area fill
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, "rgba(59, 130, 246, 0.25)");
+    gradient.addColorStop(0, "rgba(59, 130, 246, 0.22)");
     gradient.addColorStop(1, "rgba(59, 130, 246, 0)");
 
     ctx.beginPath();
     prices.forEach((p, i) => {
-      const x = (i / (prices.length - 1)) * width;
-      const y = height - ((p - min) / range) * (height - 30) - 15;
+      const x = (i / (prices.length - 1)) * chartWidth;
+      const y = height - ((p - min) / range) * (height - 20) - 10;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
-    ctx.lineTo(width, height);
+    ctx.lineTo(chartWidth, height);
     ctx.lineTo(0, height);
     ctx.closePath();
     ctx.fillStyle = gradient;
     ctx.fill();
 
+    // Price line
     ctx.beginPath();
     ctx.strokeStyle = "#3b82f6";
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 2.2;
     ctx.lineJoin = "round";
     prices.forEach((p, i) => {
-      const x = (i / (prices.length - 1)) * width;
-      const y = height - ((p - min) / range) * (height - 30) - 15;
+      const x = (i / (prices.length - 1)) * chartWidth;
+      const y = height - ((p - min) / range) * (height - 20) - 10;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
     ctx.stroke();
+
+    // Current price marker on the right
+    const lastY = height - ((prices[prices.length - 1] - min) / range) * (height - 20) - 10;
+    ctx.fillStyle = "#3b82f6";
+    ctx.beginPath();
+    ctx.arc(chartWidth, lastY, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Current price label background
+    ctx.fillStyle = "#3b82f6";
+    ctx.fillRect(chartWidth + 2, lastY - 10, 54, 20);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 11px Inter, system-ui, sans-serif";
+    ctx.fillText(prices[prices.length - 1].toFixed(2), chartWidth + 6, lastY + 4);
   }, [prices]);
 
   const handleLogout = async () => {
@@ -175,7 +175,7 @@ export default function TradePage() {
   };
 
   const placeTrade = async () => {
-    if (isTrading || !user || price === 0) return;
+    if (isTrading || !user) return;
     if (stake > balance) {
       setResult("Insufficient balance");
       return;
@@ -228,7 +228,7 @@ export default function TradePage() {
     return <div className="min-h-screen bg-[#0B1120] text-white flex items-center justify-center">Loading...</div>;
   }
 
-  const lastDigit = price > 0 ? Math.floor(price) % 10 : 0;
+  const lastDigit = Math.floor(price) % 10;
   const isUp = price >= lastPrice;
   const totalDigits = digitCounts.reduce((a, b) => a + b, 0) || 1;
   const avg = totalDigits / 10;
@@ -271,13 +271,9 @@ export default function TradePage() {
               <div className="text-[10px] text-slate-500 uppercase">Balance</div>
               <div className="font-semibold text-emerald-400 text-sm">${balance.toFixed(2)}</div>
             </div>
-            <div className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${
-              connectionStatus === "Live" 
-                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
-                : "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${connectionStatus === "Live" ? "bg-emerald-400 animate-pulse" : "bg-yellow-400"}`}></span>
-              {connectionStatus}
+            <div className="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 text-xs font-semibold px-2.5 py-1 rounded-full border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
+              LIVE
             </div>
             <button onClick={handleLogout} className="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-2 rounded-lg">
               Logout
@@ -305,7 +301,7 @@ export default function TradePage() {
               <div>
                 <div className="text-xs text-slate-400 mb-0.5">Volatility 10 Index</div>
                 <div className={`text-3xl sm:text-4xl font-bold ${isUp ? "text-emerald-400" : "text-rose-400"}`}>
-                  {price > 0 ? price.toFixed(2) : "—"}
+                  {price.toFixed(2)}
                 </div>
               </div>
               <div className="text-right">
@@ -315,7 +311,7 @@ export default function TradePage() {
             </div>
 
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
-              <canvas ref={canvasRef} className="w-full h-[260px] sm:h-[360px]" />
+              <canvas ref={canvasRef} className="w-full h-[280px] sm:h-[380px]" />
             </div>
 
             {/* Digit Statistics */}
@@ -386,20 +382,20 @@ export default function TradePage() {
             <div className="space-y-2.5 mt-auto">
               {activeTab === "match-differ" && (
                 <>
-                  <button onClick={() => { setTradeType("match"); placeTrade(); }} disabled={isTrading || price === 0} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Match</span><span className="text-emerald-100 text-sm">850%</span></button>
-                  <button onClick={() => { setTradeType("differ"); placeTrade(); }} disabled={isTrading || price === 0} className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Differ</span><span className="text-rose-100 text-sm">5%</span></button>
+                  <button onClick={() => { setTradeType("match"); placeTrade(); }} disabled={isTrading} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Match</span><span className="text-emerald-100 text-sm">850%</span></button>
+                  <button onClick={() => { setTradeType("differ"); placeTrade(); }} disabled={isTrading} className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Differ</span><span className="text-rose-100 text-sm">5%</span></button>
                 </>
               )}
               {activeTab === "even-odd" && (
                 <>
-                  <button onClick={() => { setTradeType("even"); placeTrade(); }} disabled={isTrading || price === 0} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Even</span><span className="text-emerald-100 text-sm">90%</span></button>
-                  <button onClick={() => { setTradeType("odd"); placeTrade(); }} disabled={isTrading || price === 0} className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Odd</span><span className="text-rose-100 text-sm">90%</span></button>
+                  <button onClick={() => { setTradeType("even"); placeTrade(); }} disabled={isTrading} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Even</span><span className="text-emerald-100 text-sm">90%</span></button>
+                  <button onClick={() => { setTradeType("odd"); placeTrade(); }} disabled={isTrading} className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Odd</span><span className="text-rose-100 text-sm">90%</span></button>
                 </>
               )}
               {activeTab === "over-under" && (
                 <>
-                  <button onClick={() => { setTradeType("over"); placeTrade(); }} disabled={isTrading || price === 0} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Over {selectedDigit}</span><span className="text-emerald-100 text-sm">90%</span></button>
-                  <button onClick={() => { setTradeType("under"); placeTrade(); }} disabled={isTrading || price === 0} className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Under {selectedDigit}</span><span className="text-rose-100 text-sm">90%</span></button>
+                  <button onClick={() => { setTradeType("over"); placeTrade(); }} disabled={isTrading} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Over {selectedDigit}</span><span className="text-emerald-100 text-sm">90%</span></button>
+                  <button onClick={() => { setTradeType("under"); placeTrade(); }} disabled={isTrading} className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition"><span>Under {selectedDigit}</span><span className="text-rose-100 text-sm">90%</span></button>
                 </>
               )}
             </div>
