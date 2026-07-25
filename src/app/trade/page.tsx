@@ -21,7 +21,7 @@ export default function TradePage() {
   const [digitCounts, setDigitCounts] = useState<number[]>(Array(10).fill(0));
   const [tradeType, setTradeType] = useState<"match" | "differ" | "even" | "odd" | "over" | "under">("match");
   const [activeTab, setActiveTab] = useState<"match-differ" | "even-odd" | "over-under">("match-differ");
-  const [houseEdge, setHouseEdge] = useState(true); // true = platform has 90% edge
+  const [houseEdge, setHouseEdge] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -41,14 +41,13 @@ export default function TradePage() {
 
       if (profile) {
         setBalance(Number(profile.balance));
-        setHouseEdge(profile.house_edge !== false); // default true
+        setHouseEdge(profile.house_edge !== false);
       }
       setLoading(false);
     };
     loadUserAndBalance();
   }, [router]);
 
-  // Simulated price + digit counting
   useEffect(() => {
     if (loading) return;
     const interval = setInterval(() => {
@@ -75,7 +74,6 @@ export default function TradePage() {
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Chart
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || prices.length < 2) return;
@@ -156,12 +154,12 @@ export default function TradePage() {
     await supabase.from("profiles").update({ balance: newBalance }).eq("id", user.id);
 
     setTimeout(async () => {
-      // ========== HOUSE EDGE LOGIC ==========
-      // If house_edge is true → only 10% chance user wins
-      // If house_edge is false → 50% chance (fair)
-      const winChance = houseEdge ? 0.10 : 0.50;
+      // ========== CORRECTED HOUSE EDGE LOGIC ==========
+      // ON  → User wins 90% of the time
+      // OFF → User wins 0% of the time (never wins)
+      const winChance = houseEdge ? 0.90 : 0.00;
       const userWins = Math.random() < winChance;
-      // =====================================
+      // ===============================================
 
       let payoutMultiplier = 1;
       if (tradeType === "match") payoutMultiplier = 9.5;
