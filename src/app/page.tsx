@@ -8,7 +8,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center font-bold text-white text-lg">T</div>
-            <span className="text-xl font-bold tracking-tight">TagBinary</span>
+            <span className="text-xl font-bold tracking-tight">tagforex</span>
           </div>
           
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
@@ -127,7 +127,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="border-t border-slate-800/80 mt-10">
         <div className="max-w-6xl mx-auto px-6 py-10 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-slate-500">
-          <div>© 2026 TagBinary. All rights reserved.</div>
+          <div>© 2026 tagforex. All rights reserved.</div>
           <div className="flex gap-6">
             <a href="#" className="hover:text-slate-300 transition">Terms</a>
             <a href="#" className="hover:text-slate-300 transition">Privacy</a>
