@@ -18,6 +18,8 @@ export default function TradePage() {
   const [isTrading, setIsTrading] = useState(false);
   const [result, setResult] = useState("");
   const [prices, setPrices] = useState<number[]>([9386.34]);
+  const [tradeType, setTradeType] = useState<"match" | "differ" | "even" | "odd" | "over" | "under">("match");
+  const [activeTab, setActiveTab] = useState<"match-differ" | "even-odd" | "over-under">("match-differ");
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -27,7 +29,6 @@ export default function TradePage() {
         router.push("/login");
         return;
       }
-
       setUser(user);
 
       const { data: profile } = await supabase
@@ -36,16 +37,13 @@ export default function TradePage() {
         .eq("id", user.id)
         .single();
 
-      if (profile) {
-        setBalance(Number(profile.balance));
-      }
-
+      if (profile) setBalance(Number(profile.balance));
       setLoading(false);
     };
-
     loadUserAndBalance();
   }, [router]);
 
+  // Simulated price
   useEffect(() => {
     if (loading) return;
     const interval = setInterval(() => {
@@ -64,6 +62,7 @@ export default function TradePage() {
     return () => clearInterval(interval);
   }, [loading]);
 
+  // Chart
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || prices.length < 2) return;
@@ -78,9 +77,9 @@ export default function TradePage() {
 
     const width = rect.width;
     const height = rect.height;
-
     ctx.clearRect(0, 0, width, height);
 
+    // Grid
     ctx.strokeStyle = "rgba(148, 163, 184, 0.05)";
     ctx.lineWidth = 1;
     for (let i = 1; i < 6; i++) {
@@ -130,7 +129,7 @@ export default function TradePage() {
     router.push("/login");
   };
 
-  const placeTrade = async (type: "match" | "differ") => {
+  const placeTrade = async () => {
     if (isTrading || !user) return;
     if (stake > balance) {
       setResult("Insufficient balance");
@@ -142,18 +141,35 @@ export default function TradePage() {
 
     const newBalance = balance - stake;
     setBalance(newBalance);
-
-    await supabase
-      .from("profiles")
-      .update({ balance: newBalance })
-      .eq("id", user.id);
+    await supabase.from("profiles").update({ balance: newBalance }).eq("id", user.id);
 
     setTimeout(async () => {
       const finalDigit = Math.floor(price) % 10;
-      const won = type === "match" ? finalDigit === selectedDigit : finalDigit !== selectedDigit;
-      const payout = type === "match" ? stake * 9.5 : stake * 1.05;
-      const profit = won ? payout - stake : -stake;
+      let won = false;
+      let payoutMultiplier = 1;
 
+      if (tradeType === "match") {
+        won = finalDigit === selectedDigit;
+        payoutMultiplier = 9.5;
+      } else if (tradeType === "differ") {
+        won = finalDigit !== selectedDigit;
+        payoutMultiplier = 1.05;
+      } else if (tradeType === "even") {
+        won = finalDigit % 2 === 0;
+        payoutMultiplier = 1.9;
+      } else if (tradeType === "odd") {
+        won = finalDigit % 2 === 1;
+        payoutMultiplier = 1.9;
+      } else if (tradeType === "over") {
+        won = finalDigit > selectedDigit;
+        payoutMultiplier = 1.9;
+      } else if (tradeType === "under") {
+        won = finalDigit < selectedDigit;
+        payoutMultiplier = 1.9;
+      }
+
+      const payout = stake * payoutMultiplier;
+      const profit = won ? payout - stake : -stake;
       let finalBalance = newBalance;
 
       if (won) {
@@ -164,14 +180,11 @@ export default function TradePage() {
         setResult(`LOSS -$${stake.toFixed(2)}`);
       }
 
-      await supabase
-        .from("profiles")
-        .update({ balance: finalBalance })
-        .eq("id", user.id);
+      await supabase.from("profiles").update({ balance: finalBalance }).eq("id", user.id);
 
       await supabase.from("trades").insert({
         user_id: user.id,
-        type: type,
+        type: tradeType,
         digit: selectedDigit,
         stake: stake,
         payout: won ? payout : 0,
@@ -192,6 +205,7 @@ export default function TradePage() {
 
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-100">
+      {/* Header */}
       <header className="border-b border-slate-800/80 bg-[#0B1120]/90 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-5 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-8">
@@ -199,7 +213,6 @@ export default function TradePage() {
               <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center font-bold text-white">T</div>
               <span className="font-bold text-lg tracking-tight">TagBinary</span>
             </Link>
-
             <div className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-300">
               <Link href="/dashboard" className="hover:text-white transition">Dashboard</Link>
               <Link href="/trade" className="text-white">Trade</Link>
@@ -210,7 +223,6 @@ export default function TradePage() {
               <Link href="/profile" className="hover:text-white transition">Profile</Link>
             </div>
           </div>
-
           <div className="flex items-center gap-3">
             <div className="hidden sm:block text-right mr-2">
               <div className="text-[11px] text-slate-500 uppercase tracking-wider">Balance</div>
@@ -229,6 +241,7 @@ export default function TradePage() {
 
       <main className="max-w-7xl mx-auto px-5 py-6">
         <div className="grid lg:grid-cols-3 gap-6">
+          {/* Chart Section */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-end justify-between">
               <div>
@@ -244,33 +257,53 @@ export default function TradePage() {
             </div>
 
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-xl shadow-black/20">
-              <canvas ref={canvasRef} className="w-full h-[400px]" />
+              <canvas ref={canvasRef} className="w-full h-[420px]" />
             </div>
           </div>
 
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/20">
-            <h2 className="font-semibold text-lg mb-6">Place Trade</h2>
+          {/* Right Trading Panel */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-xl shadow-black/20 flex flex-col">
+            {/* Tabs */}
+            <div className="flex gap-1 mb-5 bg-slate-950 rounded-xl p-1">
+              <button
+                onClick={() => { setActiveTab("match-differ"); setTradeType("match"); }}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${activeTab === "match-differ" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+              >
+                MATCH/DIFFER
+              </button>
+              <button
+                onClick={() => { setActiveTab("even-odd"); setTradeType("even"); }}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${activeTab === "even-odd" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+              >
+                EVEN/ODD
+              </button>
+              <button
+                onClick={() => { setActiveTab("over-under"); setTradeType("over"); }}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${activeTab === "over-under" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+              >
+                OVER/UNDER
+              </button>
+            </div>
 
-            <div className="mb-6">
-              <label className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-2.5 block">Stake</label>
-              <div className="flex items-center gap-2 mb-3">
-                <button onClick={() => setStake(Math.max(1, stake - 5))} className="w-11 h-11 bg-slate-800 hover:bg-slate-700 rounded-xl text-lg font-medium transition border border-slate-700">−</button>
+            {/* Stake */}
+            <div className="mb-5">
+              <label className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-2 block">Stake</label>
+              <div className="flex items-center gap-2 mb-2">
+                <button onClick={() => setStake(Math.max(1, stake - 5))} className="w-10 h-10 bg-slate-800 hover:bg-slate-700 rounded-xl text-lg font-medium border border-slate-700">−</button>
                 <input
                   type="number"
                   value={stake}
                   onChange={(e) => setStake(Number(e.target.value) || 1)}
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl text-center py-3 text-lg font-semibold focus:outline-none focus:border-blue-500 transition"
+                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl text-center py-2.5 text-lg font-semibold focus:outline-none focus:border-blue-500"
                 />
-                <button onClick={() => setStake(stake + 5)} className="w-11 h-11 bg-slate-800 hover:bg-slate-700 rounded-xl text-lg font-medium transition border border-slate-700">+</button>
+                <button onClick={() => setStake(stake + 5)} className="w-10 h-10 bg-slate-800 hover:bg-slate-700 rounded-xl text-lg font-medium border border-slate-700">+</button>
               </div>
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-5 gap-1.5">
                 {[1, 5, 10, 25, 50].map((v) => (
                   <button
                     key={v}
                     onClick={() => setStake(v)}
-                    className={`py-2 text-sm rounded-lg font-medium transition ${
-                      stake === v ? "bg-blue-600 text-white shadow-md shadow-blue-600/20" : "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
-                    }`}
+                    className={`py-1.5 text-xs rounded-lg font-medium transition ${stake === v ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 border border-slate-700"}`}
                   >
                     ${v}
                   </button>
@@ -278,46 +311,94 @@ export default function TradePage() {
               </div>
             </div>
 
-            <div className="mb-6">
-              <label className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-2.5 block">Select Digit</label>
-              <div className="grid grid-cols-5 gap-2">
-                {[0,1,2,3,4,5,6,7,8,9].map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => setSelectedDigit(d)}
-                    className={`py-2.5 rounded-xl text-sm font-semibold transition ${
-                      selectedDigit === d
-                        ? "bg-blue-600 text-white shadow-md shadow-blue-600/25"
-                        : "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
-                    }`}
-                  >
-                    {d}
-                  </button>
-                ))}
+            {/* Digit Selector (for Match/Differ and Over/Under) */}
+            {(activeTab === "match-differ" || activeTab === "over-under") && (
+              <div className="mb-5">
+                <label className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-2 block">Select Digit</label>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[0,1,2,3,4,5,6,7,8,9].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setSelectedDigit(d)}
+                      className={`py-2 rounded-xl text-sm font-semibold transition ${
+                        selectedDigit === d ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 border border-slate-700"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="space-y-3">
-              <button
-                onClick={() => placeTrade("match")}
-                disabled={isTrading}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition shadow-lg shadow-emerald-600/15"
-              >
-                <span>Match</span>
-                <span className="text-emerald-100 text-sm font-medium">850%</span>
-              </button>
-              <button
-                onClick={() => placeTrade("differ")}
-                disabled={isTrading}
-                className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-between px-5 transition shadow-lg shadow-rose-600/15"
-              >
-                <span>Differ</span>
-                <span className="text-rose-100 text-sm font-medium">5%</span>
-              </button>
+            {/* Action Buttons */}
+            <div className="space-y-2.5 mt-auto">
+              {activeTab === "match-differ" && (
+                <>
+                  <button
+                    onClick={() => { setTradeType("match"); placeTrade(); }}
+                    disabled={isTrading}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl flex items-center justify-between px-5 transition"
+                  >
+                    <span>Match</span>
+                    <span className="text-emerald-100 text-sm">850%</span>
+                  </button>
+                  <button
+                    onClick={() => { setTradeType("differ"); placeTrade(); }}
+                    disabled={isTrading}
+                    className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl flex items-center justify-between px-5 transition"
+                  >
+                    <span>Differ</span>
+                    <span className="text-rose-100 text-sm">5%</span>
+                  </button>
+                </>
+              )}
+
+              {activeTab === "even-odd" && (
+                <>
+                  <button
+                    onClick={() => { setTradeType("even"); placeTrade(); }}
+                    disabled={isTrading}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl flex items-center justify-between px-5 transition"
+                  >
+                    <span>Even</span>
+                    <span className="text-emerald-100 text-sm">90%</span>
+                  </button>
+                  <button
+                    onClick={() => { setTradeType("odd"); placeTrade(); }}
+                    disabled={isTrading}
+                    className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl flex items-center justify-between px-5 transition"
+                  >
+                    <span>Odd</span>
+                    <span className="text-rose-100 text-sm">90%</span>
+                  </button>
+                </>
+              )}
+
+              {activeTab === "over-under" && (
+                <>
+                  <button
+                    onClick={() => { setTradeType("over"); placeTrade(); }}
+                    disabled={isTrading}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl flex items-center justify-between px-5 transition"
+                  >
+                    <span>Over {selectedDigit}</span>
+                    <span className="text-emerald-100 text-sm">90%</span>
+                  </button>
+                  <button
+                    onClick={() => { setTradeType("under"); placeTrade(); }}
+                    disabled={isTrading}
+                    className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl flex items-center justify-between px-5 transition"
+                  >
+                    <span>Under {selectedDigit}</span>
+                    <span className="text-rose-100 text-sm">90%</span>
+                  </button>
+                </>
+              )}
             </div>
 
             {result && (
-              <div className={`mt-5 text-center text-sm font-medium py-3.5 rounded-xl ${
+              <div className={`mt-4 text-center text-sm font-medium py-3 rounded-xl ${
                 result.includes("WIN") 
                   ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
                   : result.includes("LOSS") 
