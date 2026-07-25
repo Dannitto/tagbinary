@@ -204,6 +204,9 @@ export default function TradePage() {
   const isUp = price >= lastPrice;
   const totalDigits = digitCounts.reduce((a, b) => a + b, 0) || 1;
 
+  // Calculate average for colour markers
+  const avg = totalDigits / 10;
+
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-100">
       <header className="border-b border-slate-800/80 bg-[#0B1120]/95 backdrop-blur sticky top-0 z-50">
@@ -285,30 +288,39 @@ export default function TradePage() {
               <canvas ref={canvasRef} className="w-full h-[260px] sm:h-[360px]" />
             </div>
 
-            {/* Improved Digit Frequency - closer to the video */}
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4">
-              <div className="text-[10px] text-slate-400 mb-3 uppercase tracking-wider text-center">Digit Statistics</div>
-              <div className="flex justify-between gap-1 sm:gap-2">
+            {/* Digit Statistics - styled like the video */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl px-3 py-4">
+              <div className="flex justify-between items-end gap-1">
                 {digitCounts.map((count, d) => {
                   const percent = ((count / totalDigits) * 100).toFixed(1);
                   const isCurrent = d === lastDigit;
-                  const isSelected = d === selectedDigit;
+                  const isHot = count > avg * 1.15;
+                  const isCold = count < avg * 0.85 && totalDigits > 20;
 
                   return (
-                    <div key={d} className="flex flex-col items-center flex-1">
+                    <div key={d} className="flex flex-col items-center flex-1 relative">
+                      {/* Coloured marker (like the video) */}
+                      {isCurrent && (
+                        <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-orange-400"></div>
+                      )}
+                      {isHot && !isCurrent && (
+                        <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-emerald-400"></div>
+                      )}
+                      {isCold && !isCurrent && (
+                        <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-rose-400"></div>
+                      )}
+
                       <div
-                        className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                        className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
                           isCurrent
-                            ? "bg-blue-600 text-white ring-2 ring-blue-400 scale-110"
-                            : isSelected
-                            ? "bg-slate-700 text-white ring-1 ring-slate-500"
+                            ? "bg-blue-600 text-white scale-110 shadow-lg shadow-blue-600/30"
                             : "bg-slate-800 text-slate-300"
                         }`}
                       >
                         {d}
                       </div>
-                      <div className={`text-[10px] sm:text-xs mt-1.5 font-medium ${
-                        isCurrent ? "text-blue-400" : "text-slate-400"
+                      <div className={`text-[10px] sm:text-[11px] mt-1.5 font-medium ${
+                        isCurrent ? "text-blue-400" : isHot ? "text-emerald-400" : isCold ? "text-rose-400" : "text-slate-500"
                       }`}>
                         {percent}%
                       </div>
