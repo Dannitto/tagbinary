@@ -25,7 +25,6 @@ export default function TradePage() {
   const [houseEdge, setHouseEdge] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState("Connecting...");
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     const loadUserAndBalance = async () => {
@@ -51,81 +50,61 @@ export default function TradePage() {
     loadUserAndBalance();
   }, [router]);
 
-  // Connect to Deriv using public App ID 1089
+  // Connect to our server-side Deriv proxy (SSE)
   useEffect(() => {
     if (loading) return;
 
-    let reconnectTimeout: any;
+    const eventSource = new EventSource("/api/deriv");
 
-    const connectDeriv = () => {
+    eventSource.onmessage = (event) => {
       try {
-        const ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
-        wsRef.current = ws;
+        const data = JSON.parse(event.data);
 
-        ws.onopen = () => {
-          console.log("Deriv WebSocket connected");
-          setConnectionStatus("Live");
-
-          // Subscribe to Volatility 10 Index
-          ws.send(JSON.stringify({
-            ticks: "R_10",
-            subscribe: 1
-          }));
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-
-            if (data.msg_type === "tick" && data.tick) {
-              const newPrice = Number(data.tick.quote);
-
-              setPrice((prev) => {
-                setLastPrice(prev || newPrice);
-                return newPrice;
-              });
-
-              const digit = Math.floor(newPrice) % 10;
-              setDigitCounts((old) => {
-                const updated = [...old];
-                updated[digit] += 1;
-                return updated;
-              });
-
-              setPrices((old) => {
-                const updated = [...old, newPrice];
-                if (updated.length > 80) updated.shift();
-                return updated;
-              });
-            }
-
-            if (data.error) {
-              console.error("Deriv error:", data.error);
-              setConnectionStatus("Error");
-            }
-          } catch (err) {
-            console.error("Parse error:", err);
+        if (data.type === "status") {
+          if (data.status === "connected") {
+            setConnectionStatus("Live");
+          } else {
+            setConnectionStatus("Reconnecting...");
           }
-        };
+        }
 
-        ws.onclose = () => {
-          setConnectionStatus("Reconnecting...");
-          reconnectTimeout = setTimeout(connectDeriv, 4000);
-        };
+        if (data.type === "tick") {
+          const newPrice = Number(data.quote);
 
-        ws.onerror = () => {
+          setPrice((prev) => {
+            setLastPrice(prev || newPrice);
+            return newPrice;
+          });
+
+          const digit = Math.floor(newPrice) % 10;
+          setDigitCounts((old) => {
+            const updated = [...old];
+            updated[digit] += 1;
+            return updated;
+          });
+
+          setPrices((old) => {
+            const updated = [...old, newPrice];
+            if (updated.length > 80) updated.shift();
+            return updated;
+          });
+        }
+
+        if (data.type === "error") {
+          console.error("Deriv proxy error:", data.message);
           setConnectionStatus("Error");
-        };
+        }
       } catch (err) {
-        setConnectionStatus("Error");
+        console.error("SSE parse error:", err);
       }
     };
 
-    connectDeriv();
+    eventSource.onerror = () => {
+      setConnectionStatus("Reconnecting...");
+    };
 
     return () => {
-      if (wsRef.current) wsRef.current.close();
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      eventSource.close();
     };
   }, [loading]);
 
