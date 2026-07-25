@@ -27,10 +27,6 @@ export default function TradePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Your Deriv credentials
-  const DERIV_APP_ID = "33VDdSfhp6NFwAyI1J4H3";
-  const DERIV_TOKEN = "pat_06e5b31759e4227e5b28f4d5800f0647a7f3fac3c6329048c0c48ea069b840d5";
-
   useEffect(() => {
     const loadUserAndBalance = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -55,7 +51,7 @@ export default function TradePage() {
     loadUserAndBalance();
   }, [router]);
 
-  // Connect to Deriv with your credentials
+  // Connect to Deriv using public App ID 1089
   useEffect(() => {
     if (loading) return;
 
@@ -63,42 +59,24 @@ export default function TradePage() {
 
     const connectDeriv = () => {
       try {
-        const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${DERIV_APP_ID}`);
+        const ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
         wsRef.current = ws;
 
         ws.onopen = () => {
           console.log("Deriv WebSocket connected");
-          setConnectionStatus("Authorizing...");
+          setConnectionStatus("Live");
 
-          // Authorize with your token
+          // Subscribe to Volatility 10 Index
           ws.send(JSON.stringify({
-            authorize: DERIV_TOKEN
+            ticks: "R_10",
+            subscribe: 1
           }));
         };
 
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            console.log("Deriv message:", data);
 
-            // After successful authorization, subscribe to ticks
-            if (data.msg_type === "authorize") {
-              if (data.error) {
-                console.error("Authorize error:", data.error);
-                setConnectionStatus("Auth Error");
-                return;
-              }
-              console.log("Authorized successfully");
-              setConnectionStatus("Live");
-
-              // Subscribe to Volatility 10 Index
-              ws.send(JSON.stringify({
-                ticks: "R_10",
-                subscribe: 1
-              }));
-            }
-
-            // Handle tick data
             if (data.msg_type === "tick" && data.tick) {
               const newPrice = Number(data.tick.quote);
 
@@ -122,26 +100,23 @@ export default function TradePage() {
             }
 
             if (data.error) {
-              console.error("Deriv API Error:", data.error);
+              console.error("Deriv error:", data.error);
               setConnectionStatus("Error");
             }
           } catch (err) {
-            console.error("Error parsing message:", err);
+            console.error("Parse error:", err);
           }
         };
 
         ws.onclose = () => {
-          console.log("WebSocket closed");
           setConnectionStatus("Reconnecting...");
           reconnectTimeout = setTimeout(connectDeriv, 4000);
         };
 
-        ws.onerror = (err) => {
-          console.error("WebSocket error:", err);
+        ws.onerror = () => {
           setConnectionStatus("Error");
         };
       } catch (err) {
-        console.error("Failed to create WebSocket:", err);
         setConnectionStatus("Error");
       }
     };
