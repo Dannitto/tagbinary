@@ -91,7 +91,7 @@ export default function DashboardPage() {
 
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white text-sm">T</div>
-              <span className="text-lg font-bold">TagBinary</span>
+              <span className="text-lg font-bold">tagforex</span>
             </div>
           </div>
 
