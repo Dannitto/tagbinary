@@ -97,7 +97,7 @@ export default function AdminSettingsPage() {
       <aside className="w-64 bg-slate-900 border-r border-slate-800 hidden md:flex flex-col">
         <div className="p-6 border-b border-slate-800 flex items-center gap-2">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white">T</div>
-          <span className="text-lg font-bold">TagBinary</span>
+          <span className="text-lg font-bold">tagforex</span>
         </div>
         <nav className="flex-1 p-4 space-y-1 text-sm">
           <Link href="/admin" className="block px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition">Dashboard</Link>
@@ -134,7 +134,7 @@ export default function AdminSettingsPage() {
               <label className="block text-sm text-slate-400 mb-1.5">Platform Name</label>
               <input
                 type="text"
-                defaultValue="TagBinary"
+                defaultValue="tagforex"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -143,7 +143,7 @@ export default function AdminSettingsPage() {
               <label className="block text-sm text-slate-400 mb-1.5">Support Email</label>
               <input
                 type="email"
-                defaultValue="support@tagbinary.com"
+                defaultValue="support@tagforex.com"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500"
               />
             </div>
