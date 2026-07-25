@@ -27,7 +27,6 @@ export default function TradePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Load user + balance
   useEffect(() => {
     const loadUserAndBalance = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -52,7 +51,6 @@ export default function TradePage() {
     loadUserAndBalance();
   }, [router]);
 
-  // Connect to Deriv WebSocket
   useEffect(() => {
     if (loading) return;
 
@@ -60,14 +58,14 @@ export default function TradePage() {
 
     const connectDeriv = () => {
       try {
-        const ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
+        // Alternative Deriv endpoint
+        const ws = new WebSocket("wss://green.binaryws.com/websockets/v3?app_id=1089");
         wsRef.current = ws;
 
         ws.onopen = () => {
           console.log("Deriv WebSocket connected");
           setConnectionStatus("Live");
 
-          // Subscribe to Volatility 10 Index
           ws.send(JSON.stringify({
             ticks: "R_10",
             subscribe: 1
@@ -138,7 +136,6 @@ export default function TradePage() {
     };
   }, [loading]);
 
-  // Chart
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || prices.length < 2) return;
