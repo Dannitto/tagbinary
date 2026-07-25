@@ -269,4 +269,28 @@ export default function AdminUsersPage() {
               <label className="block text-sm text-slate-400 mb-1.5">New Balance ($)</label>
               <input
                 type="number"
-                value={editBalance
+                value={editBalance}
+                onChange={(e) => setEditBalance(Number(e.target.value))}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-lg font-semibold focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={saveBalance}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-xl"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-semibold py-3 rounded-xl"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
