@@ -55,31 +55,31 @@ export default function TradePage() {
 
     const interval = setInterval(() => {
       setPrice((prev) => {
-        const change = (Math.random() - 0.5) * 5.5;
+        const change = (Math.random() - 0.5) * 4.8;
         const newPrice = Number((prev + change).toFixed(2));
         const digit = Math.floor(newPrice) % 10;
         setLastDigit(digit);
 
         setDigitStats((prev) => {
           const next = [...prev];
-          next[digit] = Math.min(14, next[digit] + 0.7);
-          return next.map((v, i) => (i === digit ? v : Math.max(6, v - 0.15)));
+          next[digit] = Math.min(14, next[digit] + 0.6);
+          return next.map((v, i) => (i === digit ? v : Math.max(6, v - 0.12)));
         });
 
         setPrices((prev) => {
           const updated = [...prev, newPrice];
-          if (updated.length > 70) updated.shift();
+          if (updated.length > 80) updated.shift();
           return updated;
         });
 
         return newPrice;
       });
-    }, 850);
+    }, 800);
 
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Draw chart with price scale on the right
+  // Professional chart
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -88,60 +88,104 @@ export default function TradePage() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const dpr = window.devicePixelRatio || 1;
     const rect = container.getBoundingClientRect();
-    canvas.width = rect.width * devicePixelRatio;
-    canvas.height = rect.height * devicePixelRatio;
-    ctx.scale(devicePixelRatio, devicePixelRatio);
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
 
-    const w = rect.width;
-    const h = rect.height;
-    const rightPadding = 58;
+    const width = rect.width;
+    const height = rect.height;
+    const rightPadding = 70;
+    const chartWidth = width - rightPadding;
 
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(0, 0, width, height);
 
-    const min = Math.min(...prices) - 2;
-    const max = Math.max(...prices) + 2;
+    const min = Math.min(...prices) - 3;
+    const max = Math.max(...prices) + 3;
     const range = max - min || 1;
 
-    // Grid + price labels
-    ctx.strokeStyle = "rgba(100,116,139,0.15)";
-    ctx.fillStyle = "#64748b";
-    ctx.font = "11px system-ui";
+    // === Grid + Price Scale (right side) ===
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "11px Inter, system-ui, sans-serif";
     ctx.textAlign = "left";
 
-    for (let i = 0; i <= 4; i++) {
-      const y = (h / 4) * i;
-      const priceLevel = max - (range / 4) * i;
+    const steps = 5;
+    for (let i = 0; i <= steps; i++) {
+      const y = (height / steps) * i;
+      const priceLevel = max - (range / steps) * i;
 
+      // horizontal grid line
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(w - rightPadding, y);
+      ctx.lineTo(chartWidth, y);
       ctx.stroke();
 
-      ctx.fillText(priceLevel.toFixed(2), w - rightPadding + 6, y + 4);
+      // price label
+      ctx.fillText(priceLevel.toFixed(2), chartWidth + 10, y + 4);
     }
 
-    // Price line
+    // === Gradient Fill ===
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, "rgba(34, 197, 94, 0.25)");
+    gradient.addColorStop(1, "rgba(34, 197, 94, 0)");
+
     ctx.beginPath();
-    ctx.strokeStyle = "#3b82f6";
-    ctx.lineWidth = 1.8;
     prices.forEach((p, i) => {
-      const x = (i / (prices.length - 1)) * (w - rightPadding);
-      const y = h - ((p - min) / range) * (h * 0.85) - h * 0.08;
+      const x = (i / (prices.length - 1)) * chartWidth;
+      const y = height - ((p - min) / range) * (height - 20) - 10;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.lineTo(chartWidth, height);
+    ctx.lineTo(0, height);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    // === Price Line ===
+    ctx.beginPath();
+    ctx.strokeStyle = "#22c55e";
+    ctx.lineWidth = 2.2;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    prices.forEach((p, i) => {
+      const x = (i / (prices.length - 1)) * chartWidth;
+      const y = height - ((p - min) / range) * (height - 20) - 10;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
     ctx.stroke();
 
-    // Current price marker
-    const lastY = h - ((prices[prices.length - 1] - min) / range) * (h * 0.85) - h * 0.08;
-    const markerColor = lastDigit % 2 === 0 ? "#22c55e" : "#ef4444";
+    // === Current Price Marker + Badge ===
+    const lastY = height - ((prices[prices.length - 1] - min) / range) * (height - 20) - 10;
 
+    // small circle
     ctx.beginPath();
-    ctx.arc(w - rightPadding - 2, lastY, 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = markerColor;
+    ctx.arc(chartWidth, lastY, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#22c55e";
     ctx.fill();
-  }, [prices, lastDigit]);
+    ctx.strokeStyle = "#0b0e17";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // price badge background
+    const badgeText = prices[prices.length - 1].toFixed(2);
+    ctx.font = "bold 12px Inter, system-ui, sans-serif";
+    const textWidth = ctx.measureText(badgeText).width;
+
+    ctx.fillStyle = "#22c55e";
+    ctx.beginPath();
+    ctx.roundRect(chartWidth + 8, lastY - 11, textWidth + 14, 22, 4);
+    ctx.fill();
+
+    // price text
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "left";
+    ctx.fillText(badgeText, chartWidth + 15, lastY + 4);
+  }, [prices]);
 
   const placeTrade = async (dir: "even" | "odd") => {
     if (isTrading || stake > balance || stake < 1) return;
@@ -238,9 +282,17 @@ export default function TradePage() {
         {/* LEFT - Chart */}
         <div className="flex-1 p-3 flex flex-col min-h-0">
           <div className="flex items-center justify-between mb-2">
-            <div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">Volatility 10 Index</div>
-              <div className="text-xl font-semibold">{price.toFixed(2)}</div>
+            <div className="flex items-center gap-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Volatility 10 Index</span>
+                  <span className="flex items-center gap-1 text-[10px] bg-green-500/15 text-green-500 px-1.5 py-0.5 rounded-full">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                    LIVE
+                  </span>
+                </div>
+                <div className="text-xl font-semibold mt-0.5">{price.toFixed(2)}</div>
+              </div>
             </div>
             <div className="text-right">
               <div className="text-xs text-slate-500 dark:text-slate-400">Last Digit</div>
@@ -251,7 +303,7 @@ export default function TradePage() {
           </div>
 
           {/* Chart */}
-          <div ref={containerRef} className="flex-1 bg-white dark:bg-[#12161f] rounded-xl border border-slate-200 dark:border-white/5 relative min-h-[200px]">
+          <div ref={containerRef} className="flex-1 bg-white dark:bg-[#0f1623] rounded-xl border border-slate-200 dark:border-white/5 relative min-h-[240px] overflow-hidden">
             <canvas ref={canvasRef} className="w-full h-full" />
           </div>
 
@@ -344,7 +396,6 @@ export default function TradePage() {
               <span className="font-semibold text-green-600 dark:text-green-400">${(stake * 1.95).toFixed(2)}</span>
             </div>
 
-            {/* Strong Green / Red buttons */}
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
                 onClick={() => placeTrade("even")}
