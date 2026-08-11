@@ -14,19 +14,18 @@ export default function TradePage() {
 
   const [stake, setStake] = useState(10);
   const [selectedDigit, setSelectedDigit] = useState(5);
-  const [tradeType, setTradeType] = useState<"match" | "differ">("match");
   const [isTrading, setIsTrading] = useState(false);
   const [result, setResult] = useState<"win" | "loss" | null>(null);
   const [payout, setPayout] = useState(0);
   const [activeTab, setActiveTab] = useState<"open" | "closed" | "transactions">("open");
 
-  const [price, setPrice] = useState(9421.07);
+  const [price, setPrice] = useState(9424.48);
   const [prices, setPrices] = useState<number[]>([]);
-  const [lastDigit, setLastDigit] = useState(7);
+  const [lastDigit, setLastDigit] = useState(8);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [digitStats, setDigitStats] = useState([0, 13.5, 10.5, 9.0, 11.9, 11.1, 10.3, 10.5, 11.0, 12.2]);
+  const [digitStats, setDigitStats] = useState([0.1, 14.3, 14.5, 12.8, 9.2, 8.6, 10.0, 10.0, 10.5, 10.0]);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -49,37 +48,37 @@ export default function TradePage() {
     checkUser();
   }, [router]);
 
-  // Price simulation
+  // Very smooth price movement (small changes)
   useEffect(() => {
     if (loading) return;
 
     const interval = setInterval(() => {
       setPrice((prev) => {
-        const change = (Math.random() - 0.48) * 2.2;
+        const change = (Math.random() - 0.5) * 1.1; // small & smooth
         const newPrice = Number((prev + change).toFixed(2));
         const digit = Math.floor(newPrice) % 10;
         setLastDigit(digit);
 
         setDigitStats((prev) => {
           const next = [...prev];
-          next[digit] = Math.min(16, next[digit] + 0.35);
-          return next.map((v, i) => (i === digit ? v : Math.max(7, v - 0.07)));
+          next[digit] = Math.min(16, next[digit] + 0.25);
+          return next.map((v, i) => (i === digit ? v : Math.max(6, v - 0.05)));
         });
 
         setPrices((prev) => {
           const updated = [...prev, newPrice];
-          if (updated.length > 100) updated.shift();
+          if (updated.length > 110) updated.shift();
           return updated;
         });
 
         return newPrice;
       });
-    }, 650);
+    }, 600);
 
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Smooth chart
+  // Smooth chart with tighter price scale
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -96,34 +95,38 @@ export default function TradePage() {
 
     const width = rect.width;
     const height = rect.height;
-    const rightPadding = 68;
+    const rightPadding = 62;
     const chartWidth = width - rightPadding;
 
     ctx.clearRect(0, 0, width, height);
 
-    const min = Math.min(...prices) - 1.2;
-    const max = Math.max(...prices) + 1.2;
+    // Tighter range so the graph doesn't jump too much
+    const min = Math.min(...prices) - 0.8;
+    const max = Math.max(...prices) + 0.8;
     const range = max - min || 1;
 
-    // Grid + price scale
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
+    // Grid + tighter price labels
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.07)";
     ctx.fillStyle = "#64748b";
-    ctx.font = "11px Inter, system-ui";
+    ctx.font = "10.5px Inter, system-ui";
     ctx.textAlign = "left";
 
-    for (let i = 0; i <= 7; i++) {
-      const y = (height / 7) * i;
-      const priceLevel = max - (range / 7) * i;
+    const steps = 9;
+    for (let i = 0; i <= steps; i++) {
+      const y = (height / steps) * i;
+      const priceLevel = max - (range / steps) * i;
+
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(chartWidth, y);
       ctx.stroke();
-      ctx.fillText(priceLevel.toFixed(2), chartWidth + 8, y + 4);
+
+      ctx.fillText(priceLevel.toFixed(2), chartWidth + 7, y + 3.5);
     }
 
     const getPoint = (i: number) => {
       const x = (i / (prices.length - 1)) * chartWidth;
-      const y = height - ((prices[i] - min) / range) * (height - 20) - 10;
+      const y = height - ((prices[i] - min) / range) * (height - 16) - 8;
       return { x, y };
     };
 
@@ -143,7 +146,7 @@ export default function TradePage() {
     ctx.lineTo(last.x, last.y);
 
     ctx.strokeStyle = "#3b82f6";
-    ctx.lineWidth = 2.3;
+    ctx.lineWidth = 2.2;
     ctx.lineJoin = "round";
     ctx.stroke();
 
@@ -152,7 +155,7 @@ export default function TradePage() {
     ctx.lineTo(0, height);
     ctx.closePath();
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, "rgba(59, 130, 246, 0.2)");
+    gradient.addColorStop(0, "rgba(59, 130, 246, 0.18)");
     gradient.addColorStop(1, "rgba(59, 130, 246, 0)");
     ctx.fillStyle = gradient;
     ctx.fill();
@@ -160,7 +163,7 @@ export default function TradePage() {
     // Current price line + badge
     ctx.beginPath();
     ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = "rgba(59, 130, 246, 0.45)";
+    ctx.strokeStyle = "rgba(59, 130, 246, 0.4)";
     ctx.lineWidth = 1;
     ctx.moveTo(0, last.y);
     ctx.lineTo(chartWidth, last.y);
@@ -168,28 +171,29 @@ export default function TradePage() {
     ctx.setLineDash([]);
 
     ctx.beginPath();
-    ctx.arc(chartWidth, last.y, 5, 0, Math.PI * 2);
+    ctx.arc(chartWidth, last.y, 4.5, 0, Math.PI * 2);
     ctx.fillStyle = "#3b82f6";
     ctx.fill();
     ctx.strokeStyle = "#0b1220";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.8;
     ctx.stroke();
 
-    const badge = last.y.toFixed ? prices[prices.length - 1].toFixed(2) : "0.00";
-    ctx.font = "bold 12px Inter, system-ui";
+    const badge = prices[prices.length - 1].toFixed(2);
+    ctx.font = "bold 11.5px Inter, system-ui";
     const tw = ctx.measureText(badge).width;
+
     ctx.fillStyle = "#3b82f6";
     ctx.beginPath();
-    ctx.roundRect(chartWidth + 8, last.y - 11, tw + 14, 22, 4);
+    ctx.roundRect(chartWidth + 7, last.y - 10, tw + 12, 20, 4);
     ctx.fill();
+
     ctx.fillStyle = "#fff";
-    ctx.fillText(badge, chartWidth + 15, last.y + 4);
+    ctx.fillText(badge, chartWidth + 13, last.y + 3.5);
   }, [prices]);
 
   const placeTrade = async (type: "match" | "differ") => {
     if (isTrading || stake > balance || stake < 1) return;
 
-    setTradeType(type);
     setIsTrading(true);
     setResult(null);
 
@@ -240,41 +244,49 @@ export default function TradePage() {
 
   return (
     <div className="min-h-screen bg-[#0b0e17] text-white flex flex-col">
-      {/* Top Header */}
+      {/* ===== TOP HEADER (matches professional site) ===== */}
       <header className="h-12 border-b border-white/5 flex items-center justify-between px-4">
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-5">
           <Link href="/dashboard" className="font-bold text-lg tracking-wide">TAG BINARY</Link>
           <div className="hidden md:flex items-center gap-4 text-sm text-slate-400">
-            <button className="hover:text-white">Copy Trading</button>
-            <Link href="/withdraw" className="hover:text-white">Withdraw</Link>
-            <button className="hover:text-white">Chat</button>
+            <button className="hover:text-white transition">Copy Trading</button>
+            <Link href="/withdraw" className="hover:text-white transition">Withdraw</Link>
+            <button className="hover:text-white transition">Chat</button>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="hidden sm:flex items-center gap-1.5 bg-white/5 rounded-full px-3 py-1 text-xs">
+            <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold">T</div>
+            <span>Tag Binary Trader</span>
+            <span className="text-slate-500">Real account</span>
+          </div>
+          <button className="bg-blue-600 hover:bg-blue-500 text-xs px-3 py-1.5 rounded-full font-medium">AI</button>
           <ThemeToggle />
           <div className="text-sm font-medium">${balance.toFixed(2)}</div>
-          <Link href="/deposit" className="bg-blue-600 hover:bg-blue-500 text-sm px-4 py-1.5 rounded-full">
+          <Link href="/deposit" className="bg-blue-600 hover:bg-blue-500 text-sm px-4 py-1.5 rounded-full font-medium">
             Deposit
           </Link>
         </div>
       </header>
 
+      {/* ===== MAIN 3-COLUMN LAYOUT ===== */}
       <div className="flex-1 flex overflow-hidden">
+        
         {/* LEFT - Chart Area */}
         <div className="flex-1 flex flex-col p-3 min-w-0">
-          {/* Stats bar */}
-          <div className="flex items-center gap-6 mb-3 text-sm">
+          {/* Stats */}
+          <div className="flex items-center gap-5 mb-2 text-sm">
             <div>
-              <div className="text-[10px] text-slate-500 uppercase">Balance</div>
+              <div className="text-[10px] text-slate-500 uppercase tracking-wide">Balance</div>
               <div className="font-semibold">${balance.toFixed(2)}</div>
             </div>
             <div>
-              <div className="text-[10px] text-slate-500 uppercase">Profit/Loss</div>
+              <div className="text-[10px] text-slate-500 uppercase tracking-wide">Profit/Loss</div>
               <div className="font-semibold text-green-400">+$0.00</div>
             </div>
             <div>
-              <div className="text-[10px] text-slate-500 uppercase">Price</div>
+              <div className="text-[10px] text-slate-500 uppercase tracking-wide">Price</div>
               <div className="font-semibold">{price.toFixed(2)}</div>
             </div>
             <div className="ml-auto flex items-center gap-1.5 text-xs text-blue-400">
@@ -292,7 +304,7 @@ export default function TradePage() {
           </div>
 
           {/* Chart */}
-          <div ref={containerRef} className="flex-1 bg-[#0b1220] rounded-xl border border-white/5 relative min-h-[280px]">
+          <div ref={containerRef} className="flex-1 bg-[#0b1220] rounded-xl border border-white/5 relative min-h-[260px]">
             <canvas ref={canvasRef} className="w-full h-full" />
           </div>
 
@@ -316,8 +328,8 @@ export default function TradePage() {
           </div>
         </div>
 
-        {/* RIGHT - Trading Panel */}
-        <div className="w-[340px] border-l border-white/5 flex flex-col bg-[#0c1018]">
+        {/* MIDDLE - Trading Controls */}
+        <div className="w-[300px] border-l border-white/5 flex flex-col bg-[#0c1018]">
           {/* Tabs */}
           <div className="flex border-b border-white/5 text-xs">
             <button className="flex-1 py-3 font-medium bg-blue-600/20 text-blue-400 border-b-2 border-blue-500">
@@ -391,12 +403,12 @@ export default function TradePage() {
               </div>
             </div>
 
-            {/* Match / Differ buttons */}
-            <div className="space-y-2 pt-2">
+            {/* Match / Differ */}
+            <div className="space-y-2 pt-1">
               <button
                 onClick={() => placeTrade("match")}
                 disabled={isTrading || stake > balance}
-                className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold flex items-center justify-between px-4 disabled:opacity-50"
+                className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold flex items-center justify-between px-4 disabled:opacity-50 transition"
               >
                 <span>Match</span>
                 <span className="text-sm opacity-90">${(stake * 8.5).toFixed(2)} • 850%</span>
@@ -404,7 +416,7 @@ export default function TradePage() {
               <button
                 onClick={() => placeTrade("differ")}
                 disabled={isTrading || stake > balance}
-                className="w-full py-3.5 rounded-xl bg-rose-600 hover:bg-rose-500 font-semibold flex items-center justify-between px-4 disabled:opacity-50"
+                className="w-full py-3.5 rounded-xl bg-rose-600 hover:bg-rose-500 font-semibold flex items-center justify-between px-4 disabled:opacity-50 transition"
               >
                 <span>Differ</span>
                 <span className="text-sm opacity-90">${(stake * 0.95).toFixed(2)} • 5%</span>
@@ -425,33 +437,36 @@ export default function TradePage() {
               </div>
             )}
           </div>
+        </div>
 
-          {/* Bottom tabs: Open / Closed / Transactions */}
-          <div className="border-t border-white/5">
-            <div className="flex text-xs">
-              <button
-                onClick={() => setActiveTab("open")}
-                className={`flex-1 py-2.5 ${activeTab === "open" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}
-              >
-                Open (0)
-              </button>
-              <button
-                onClick={() => setActiveTab("closed")}
-                className={`flex-1 py-2.5 ${activeTab === "closed" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}
-              >
-                Closed
-              </button>
-              <button
-                onClick={() => setActiveTab("transactions")}
-                className={`flex-1 py-2.5 ${activeTab === "transactions" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}
-              >
-                Transactions
-              </button>
-            </div>
-            <div className="p-6 text-center text-slate-500 text-sm">
-              <div className="text-3xl mb-2 opacity-30">📦</div>
-              No open positions<br />
-              <span className="text-xs">Your active trades will appear here</span>
+        {/* RIGHT - Open / Closed / Transactions (full height) */}
+        <div className="hidden lg:flex w-[260px] border-l border-white/5 flex-col bg-[#0c1018]">
+          <div className="flex border-b border-white/5 text-xs">
+            <button
+              onClick={() => setActiveTab("open")}
+              className={`flex-1 py-3 ${activeTab === "open" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}
+            >
+              Open (0)
+            </button>
+            <button
+              onClick={() => setActiveTab("closed")}
+              className={`flex-1 py-3 ${activeTab === "closed" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}
+            >
+              Closed
+            </button>
+            <button
+              onClick={() => setActiveTab("transactions")}
+              className={`flex-1 py-3 ${activeTab === "transactions" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}
+            >
+              Transactions
+            </button>
+          </div>
+
+          <div className="flex-1 flex items-center justify-center p-6 text-center text-slate-500 text-sm">
+            <div>
+              <div className="text-4xl mb-3 opacity-25">📦</div>
+              <div className="font-medium text-slate-400">No open positions</div>
+              <div className="text-xs mt-1">Your active trades will appear here</div>
             </div>
           </div>
         </div>
