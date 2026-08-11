@@ -48,32 +48,36 @@ export default function TradePage() {
     checkUser();
   }, [router]);
 
-  // Very smooth price movement (small changes)
+  // Extremely smooth price movement
   useEffect(() => {
     if (loading) return;
 
+    let lastChange = 0;
+
     const interval = setInterval(() => {
       setPrice((prev) => {
-        const change = (Math.random() - 0.5) * 1.1; // small & smooth
-        const newPrice = Number((prev + change).toFixed(2));
+        // Momentum-based smooth movement (much less jagged)
+        const random = (Math.random() - 0.5) * 0.6;
+        lastChange = lastChange * 0.85 + random;
+        const newPrice = Number((prev + lastChange).toFixed(2));
         const digit = Math.floor(newPrice) % 10;
         setLastDigit(digit);
 
-        setDigitStats((prev) => {
-          const next = [...prev];
-          next[digit] = Math.min(16, next[digit] + 0.25);
-          return next.map((v, i) => (i === digit ? v : Math.max(6, v - 0.05)));
+        setDigitStats((prevStats) => {
+          const next = [...prevStats];
+          next[digit] = Math.min(15, next[digit] + 0.2);
+          return next.map((v, i) => (i === digit ? v : Math.max(6.5, v - 0.04)));
         });
 
-        setPrices((prev) => {
-          const updated = [...prev, newPrice];
-          if (updated.length > 110) updated.shift();
+        setPrices((prevPrices) => {
+          const updated = [...prevPrices, newPrice];
+          if (updated.length > 120) updated.shift();
           return updated;
         });
 
         return newPrice;
       });
-    }, 600);
+    }, 550);
 
     return () => clearInterval(interval);
   }, [loading]);
@@ -100,7 +104,6 @@ export default function TradePage() {
 
     ctx.clearRect(0, 0, width, height);
 
-    // Tighter range so the graph doesn't jump too much
     const min = Math.min(...prices) - 0.8;
     const max = Math.max(...prices) + 0.8;
     const range = max - min || 1;
@@ -244,7 +247,7 @@ export default function TradePage() {
 
   return (
     <div className="min-h-screen bg-[#0b0e17] text-white flex flex-col">
-      {/* ===== TOP HEADER (matches professional site) ===== */}
+      {/* ===== TOP HEADER ===== */}
       <header className="h-12 border-b border-white/5 flex items-center justify-between px-4">
         <div className="flex items-center gap-5">
           <Link href="/dashboard" className="font-bold text-lg tracking-wide">TAG BINARY</Link>
@@ -275,7 +278,6 @@ export default function TradePage() {
         
         {/* LEFT - Chart Area */}
         <div className="flex-1 flex flex-col p-3 min-w-0">
-          {/* Stats */}
           <div className="flex items-center gap-5 mb-2 text-sm">
             <div>
               <div className="text-[10px] text-slate-500 uppercase tracking-wide">Balance</div>
@@ -295,7 +297,6 @@ export default function TradePage() {
             </div>
           </div>
 
-          {/* Asset */}
           <div className="mb-2">
             <div className="inline-flex items-center gap-2 bg-white/5 rounded-lg px-3 py-1.5 text-sm">
               <span className="font-medium">Volatility 10 (1s) Index</span>
@@ -303,12 +304,10 @@ export default function TradePage() {
             </div>
           </div>
 
-          {/* Chart */}
           <div ref={containerRef} className="flex-1 bg-[#0b1220] rounded-xl border border-white/5 relative min-h-[260px]">
             <canvas ref={canvasRef} className="w-full h-full" />
           </div>
 
-          {/* Digits */}
           <div className="mt-3 flex justify-between items-end">
             {digitStats.map((stat, digit) => {
               const isCurrent = digit === lastDigit;
@@ -330,7 +329,6 @@ export default function TradePage() {
 
         {/* MIDDLE - Trading Controls */}
         <div className="w-[300px] border-l border-white/5 flex flex-col bg-[#0c1018]">
-          {/* Tabs */}
           <div className="flex border-b border-white/5 text-xs">
             <button className="flex-1 py-3 font-medium bg-blue-600/20 text-blue-400 border-b-2 border-blue-500">
               MATCH/DIFFER
@@ -340,13 +338,11 @@ export default function TradePage() {
           </div>
 
           <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-            {/* Auto / Manual */}
             <div className="flex bg-white/5 rounded-lg p-0.5">
               <button className="flex-1 py-1.5 rounded-md bg-blue-600 text-sm font-medium">AUTO</button>
               <button className="flex-1 py-1.5 rounded-md text-sm text-slate-400">MANUAL</button>
             </div>
 
-            {/* Stake */}
             <div>
               <div className="text-xs text-slate-500 mb-1.5">STAKE</div>
               <div className="flex items-center gap-2">
@@ -369,7 +365,6 @@ export default function TradePage() {
               </div>
             </div>
 
-            {/* Target / Stop / Multiplier */}
             <div className="grid grid-cols-3 gap-2 text-xs">
               <div className="bg-white/5 rounded-lg p-2">
                 <div className="text-slate-500 mb-1">TARGET PROFIT</div>
@@ -385,7 +380,6 @@ export default function TradePage() {
               </div>
             </div>
 
-            {/* Select Digit */}
             <div>
               <div className="text-xs text-slate-500 mb-1.5">SELECT DIGIT</div>
               <div className="grid grid-cols-5 gap-1.5">
@@ -403,7 +397,6 @@ export default function TradePage() {
               </div>
             </div>
 
-            {/* Match / Differ */}
             <div className="space-y-2 pt-1">
               <button
                 onClick={() => placeTrade("match")}
@@ -439,7 +432,7 @@ export default function TradePage() {
           </div>
         </div>
 
-        {/* RIGHT - Open / Closed / Transactions (full height) */}
+        {/* RIGHT - Open / Closed / Transactions */}
         <div className="hidden lg:flex w-[260px] border-l border-white/5 flex-col bg-[#0c1018]">
           <div className="flex border-b border-white/5 text-xs">
             <button
