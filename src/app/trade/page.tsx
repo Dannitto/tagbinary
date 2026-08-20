@@ -9,7 +9,9 @@ import ThemeToggle from "@/components/ThemeToggle";
 export default function TradePage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [balance, setBalance] = useState(0);
+  const [realBalance, setRealBalance] = useState(0);
+  const [demoBalance, setDemoBalance] = useState(10000);
+  const [accountMode, setAccountMode] = useState<"demo" | "real">("demo");
   const [loading, setLoading] = useState(true);
 
   const [stake, setStake] = useState(10);
@@ -27,6 +29,8 @@ export default function TradePage() {
 
   const [digitStats, setDigitStats] = useState([0.1, 14.3, 14.5, 12.8, 9.2, 8.6, 10.0, 10.0, 10.5, 10.0]);
 
+  const currentBalance = accountMode === "demo" ? demoBalance : realBalance;
+
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -38,17 +42,27 @@ export default function TradePage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("balance")
+        .select("balance, demo_balance, account_mode")
         .eq("id", user.id)
         .single();
 
-      if (profile) setBalance(Number(profile.balance) || 0);
+      if (profile) {
+        setRealBalance(Number(profile.balance) || 0);
+        setDemoBalance(Number(profile.demo_balance) || 10000);
+        setAccountMode((profile.account_mode as "demo" | "real") || "demo");
+      }
       setLoading(false);
     };
     checkUser();
   }, [router]);
 
-  // Extremely smooth price movement
+  const switchAccount = async (mode: "demo" | "real") => {
+    if (!user) return;
+    setAccountMode(mode);
+    await supabase.from("profiles").update({ account_mode: mode }).eq("id", user.id);
+  };
+
+  // Smooth price movement
   useEffect(() => {
     if (loading) return;
 
@@ -56,17 +70,16 @@ export default function TradePage() {
 
     const interval = setInterval(() => {
       setPrice((prev) => {
-        // Momentum-based smooth movement (much less jagged)
-        const random = (Math.random() - 0.5) * 0.6;
-        lastChange = lastChange * 0.85 + random;
+        const random = (Math.random() - 0.5) * 0.55;
+        lastChange = lastChange * 0.88 + random;
         const newPrice = Number((prev + lastChange).toFixed(2));
         const digit = Math.floor(newPrice) % 10;
         setLastDigit(digit);
 
         setDigitStats((prevStats) => {
           const next = [...prevStats];
-          next[digit] = Math.min(15, next[digit] + 0.2);
-          return next.map((v, i) => (i === digit ? v : Math.max(6.5, v - 0.04)));
+          next[digit] = Math.min(15, next[digit] + 0.18);
+          return next.map((v, i) => (i === digit ? v : Math.max(6.5, v - 0.035)));
         });
 
         setPrices((prevPrices) => {
@@ -82,7 +95,7 @@ export default function TradePage() {
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Smooth chart with tighter price scale
+  // Chart
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -104,11 +117,10 @@ export default function TradePage() {
 
     ctx.clearRect(0, 0, width, height);
 
-    const min = Math.min(...prices) - 0.8;
-    const max = Math.max(...prices) + 0.8;
+    const min = Math.min(...prices) - 0.7;
+    const max = Math.max(...prices) + 0.7;
     const range = max - min || 1;
 
-    // Grid + tighter price labels
     ctx.strokeStyle = "rgba(148, 163, 184, 0.07)";
     ctx.fillStyle = "#64748b";
     ctx.font = "10.5px Inter, system-ui";
@@ -118,12 +130,10 @@ export default function TradePage() {
     for (let i = 0; i <= steps; i++) {
       const y = (height / steps) * i;
       const priceLevel = max - (range / steps) * i;
-
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(chartWidth, y);
       ctx.stroke();
-
       ctx.fillText(priceLevel.toFixed(2), chartWidth + 7, y + 3.5);
     }
 
@@ -133,7 +143,6 @@ export default function TradePage() {
       return { x, y };
     };
 
-    // Smooth curve
     ctx.beginPath();
     const first = getPoint(0);
     ctx.moveTo(first.x, first.y);
@@ -153,7 +162,6 @@ export default function TradePage() {
     ctx.lineJoin = "round";
     ctx.stroke();
 
-    // Gradient fill
     ctx.lineTo(last.x, height);
     ctx.lineTo(0, height);
     ctx.closePath();
@@ -163,7 +171,6 @@ export default function TradePage() {
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    // Current price line + badge
     ctx.beginPath();
     ctx.setLineDash([4, 4]);
     ctx.strokeStyle = "rgba(59, 130, 246, 0.4)";
@@ -195,14 +202,20 @@ export default function TradePage() {
   }, [prices]);
 
   const placeTrade = async (type: "match" | "differ") => {
-    if (isTrading || stake > balance || stake < 1) return;
+    if (isTrading || stake > currentBalance || stake < 1) return;
 
     setIsTrading(true);
     setResult(null);
 
-    const newBal = balance - stake;
-    setBalance(newBal);
-    await supabase.from("profiles").update({ balance: newBal }).eq("id", user.id);
+    const newBalance = currentBalance - stake;
+
+    if (accountMode === "demo") {
+      setDemoBalance(newBalance);
+      await supabase.from("profiles").update({ demo_balance: newBalance }).eq("id", user.id);
+    } else {
+      setRealBalance(newBalance);
+      await supabase.from("profiles").update({ balance: newBalance }).eq("id", user.id);
+    }
 
     setTimeout(async () => {
       const matched = lastDigit === selectedDigit;
@@ -210,9 +223,9 @@ export default function TradePage() {
       const multiplier = type === "match" ? 8.5 : 0.95;
       const winAmount = Number((stake * multiplier).toFixed(2));
 
-      let finalBal = newBal;
+      let finalBalance = newBalance;
       if (won) {
-        finalBal = newBal + winAmount;
+        finalBalance = newBalance + winAmount;
         setResult("win");
         setPayout(winAmount);
       } else {
@@ -220,8 +233,13 @@ export default function TradePage() {
         setPayout(0);
       }
 
-      setBalance(finalBal);
-      await supabase.from("profiles").update({ balance: finalBal }).eq("id", user.id);
+      if (accountMode === "demo") {
+        setDemoBalance(finalBalance);
+        await supabase.from("profiles").update({ demo_balance: finalBalance }).eq("id", user.id);
+      } else {
+        setRealBalance(finalBalance);
+        await supabase.from("profiles").update({ balance: finalBalance }).eq("id", user.id);
+      }
 
       await supabase.from("trades").insert({
         user_id: user.id,
@@ -231,6 +249,7 @@ export default function TradePage() {
         payout: won ? winAmount : 0,
         result: won ? "win" : "loss",
         duration: 5,
+        account_mode: accountMode,
       });
 
       setIsTrading(false);
@@ -247,7 +266,7 @@ export default function TradePage() {
 
   return (
     <div className="min-h-screen bg-[#0b0e17] text-white flex flex-col">
-      {/* ===== TOP HEADER ===== */}
+      {/* Header */}
       <header className="h-12 border-b border-white/5 flex items-center justify-between px-4">
         <div className="flex items-center gap-5">
           <Link href="/dashboard" className="font-bold text-lg tracking-wide">TAG BINARY</Link>
@@ -259,33 +278,52 @@ export default function TradePage() {
         </div>
 
         <div className="flex items-center gap-2.5">
+          {/* Demo / Real Switcher */}
+          <div className="flex items-center bg-white/5 rounded-full p-0.5 text-xs">
+            <button
+              onClick={() => switchAccount("demo")}
+              className={`px-3 py-1.5 rounded-full transition ${
+                accountMode === "demo" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Demo
+            </button>
+            <button
+              onClick={() => switchAccount("real")}
+              className={`px-3 py-1.5 rounded-full transition ${
+                accountMode === "real" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Real
+            </button>
+          </div>
+
           <div className="hidden sm:flex items-center gap-1.5 bg-white/5 rounded-full px-3 py-1 text-xs">
             <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold">T</div>
-            <span>Tag Binary Trader</span>
-            <span className="text-slate-500">Real account</span>
+            <span>{accountMode === "demo" ? "Demo Account" : "Real Account"}</span>
           </div>
-          <button className="bg-blue-600 hover:bg-blue-500 text-xs px-3 py-1.5 rounded-full font-medium">AI</button>
+
           <ThemeToggle />
-          <div className="text-sm font-medium">${balance.toFixed(2)}</div>
+          <div className="text-sm font-medium">${currentBalance.toFixed(2)}</div>
           <Link href="/deposit" className="bg-blue-600 hover:bg-blue-500 text-sm px-4 py-1.5 rounded-full font-medium">
             Deposit
           </Link>
         </div>
       </header>
 
-      {/* ===== MAIN 3-COLUMN LAYOUT ===== */}
       <div className="flex-1 flex overflow-hidden">
-        
-        {/* LEFT - Chart Area */}
+        {/* LEFT - Chart */}
         <div className="flex-1 flex flex-col p-3 min-w-0">
           <div className="flex items-center gap-5 mb-2 text-sm">
             <div>
               <div className="text-[10px] text-slate-500 uppercase tracking-wide">Balance</div>
-              <div className="font-semibold">${balance.toFixed(2)}</div>
+              <div className="font-semibold">${currentBalance.toFixed(2)}</div>
             </div>
             <div>
-              <div className="text-[10px] text-slate-500 uppercase tracking-wide">Profit/Loss</div>
-              <div className="font-semibold text-green-400">+$0.00</div>
+              <div className="text-[10px] text-slate-500 uppercase tracking-wide">Mode</div>
+              <div className={`font-semibold ${accountMode === "demo" ? "text-yellow-400" : "text-green-400"}`}>
+                {accountMode === "demo" ? "DEMO" : "REAL"}
+              </div>
             </div>
             <div>
               <div className="text-[10px] text-slate-500 uppercase tracking-wide">Price</div>
@@ -327,12 +365,10 @@ export default function TradePage() {
           </div>
         </div>
 
-        {/* MIDDLE - Trading Controls */}
+        {/* MIDDLE - Trading Panel */}
         <div className="w-[300px] border-l border-white/5 flex flex-col bg-[#0c1018]">
           <div className="flex border-b border-white/5 text-xs">
-            <button className="flex-1 py-3 font-medium bg-blue-600/20 text-blue-400 border-b-2 border-blue-500">
-              MATCH/DIFFER
-            </button>
+            <button className="flex-1 py-3 font-medium bg-blue-600/20 text-blue-400 border-b-2 border-blue-500">MATCH/DIFFER</button>
             <button className="flex-1 py-3 text-slate-500">EVEN/ODD</button>
             <button className="flex-1 py-3 text-slate-500">OVER/UNDER</button>
           </div>
@@ -347,18 +383,12 @@ export default function TradePage() {
               <div className="text-xs text-slate-500 mb-1.5">STAKE</div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setStake(Math.max(1, stake - 1))} className="w-9 h-9 rounded-lg bg-white/5 text-lg">−</button>
-                <div className="flex-1 bg-white/5 rounded-lg py-2 text-center font-semibold text-lg">
-                  $ {stake}
-                </div>
+                <div className="flex-1 bg-white/5 rounded-lg py-2 text-center font-semibold text-lg">$ {stake}</div>
                 <button onClick={() => setStake(stake + 1)} className="w-9 h-9 rounded-lg bg-white/5 text-lg">+</button>
               </div>
               <div className="flex gap-1.5 mt-2">
                 {[1, 5, 10, 25, 50, 100].map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setStake(v)}
-                    className={`flex-1 py-1 text-xs rounded-md ${stake === v ? "bg-blue-600" : "bg-white/5"}`}
-                  >
+                  <button key={v} onClick={() => setStake(v)} className={`flex-1 py-1 text-xs rounded-md ${stake === v ? "bg-blue-600" : "bg-white/5"}`}>
                     ${v}
                   </button>
                 ))}
@@ -400,7 +430,7 @@ export default function TradePage() {
             <div className="space-y-2 pt-1">
               <button
                 onClick={() => placeTrade("match")}
-                disabled={isTrading || stake > balance}
+                disabled={isTrading || stake > currentBalance}
                 className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold flex items-center justify-between px-4 disabled:opacity-50 transition"
               >
                 <span>Match</span>
@@ -408,7 +438,7 @@ export default function TradePage() {
               </button>
               <button
                 onClick={() => placeTrade("differ")}
-                disabled={isTrading || stake > balance}
+                disabled={isTrading || stake > currentBalance}
                 className="w-full py-3.5 rounded-xl bg-rose-600 hover:bg-rose-500 font-semibold flex items-center justify-between px-4 disabled:opacity-50 transition"
               >
                 <span>Differ</span>
@@ -425,9 +455,7 @@ export default function TradePage() {
             )}
 
             {isTrading && (
-              <div className="text-center text-xs text-slate-400 animate-pulse">
-                Trade running... 5s
-              </div>
+              <div className="text-center text-xs text-slate-400 animate-pulse">Trade running... 5s</div>
             )}
           </div>
         </div>
@@ -435,22 +463,13 @@ export default function TradePage() {
         {/* RIGHT - Open / Closed / Transactions */}
         <div className="hidden lg:flex w-[260px] border-l border-white/5 flex-col bg-[#0c1018]">
           <div className="flex border-b border-white/5 text-xs">
-            <button
-              onClick={() => setActiveTab("open")}
-              className={`flex-1 py-3 ${activeTab === "open" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}
-            >
+            <button onClick={() => setActiveTab("open")} className={`flex-1 py-3 ${activeTab === "open" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}>
               Open (0)
             </button>
-            <button
-              onClick={() => setActiveTab("closed")}
-              className={`flex-1 py-3 ${activeTab === "closed" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}
-            >
+            <button onClick={() => setActiveTab("closed")} className={`flex-1 py-3 ${activeTab === "closed" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}>
               Closed
             </button>
-            <button
-              onClick={() => setActiveTab("transactions")}
-              className={`flex-1 py-3 ${activeTab === "transactions" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}
-            >
+            <button onClick={() => setActiveTab("transactions")} className={`flex-1 py-3 ${activeTab === "transactions" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}>
               Transactions
             </button>
           </div>
