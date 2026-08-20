@@ -95,7 +95,7 @@ export default function TradePage() {
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Chart
+  // Chart drawing
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -304,10 +304,25 @@ export default function TradePage() {
           </div>
 
           <ThemeToggle />
+
           <div className="text-sm font-medium">${currentBalance.toFixed(2)}</div>
-          <Link href="/deposit" className="bg-blue-600 hover:bg-blue-500 text-sm px-4 py-1.5 rounded-full font-medium">
-            Deposit
-          </Link>
+
+          {/* Smart Deposit / Add Funds button */}
+          {accountMode === "real" && realBalance < 1 ? (
+            <Link
+              href="/deposit"
+              className="bg-green-600 hover:bg-green-500 text-sm px-4 py-1.5 rounded-full font-medium animate-pulse"
+            >
+              Add Funds
+            </Link>
+          ) : (
+            <Link
+              href="/deposit"
+              className="bg-blue-600 hover:bg-blue-500 text-sm px-4 py-1.5 rounded-full font-medium"
+            >
+              Deposit
+            </Link>
+          )}
         </div>
       </header>
 
@@ -374,6 +389,16 @@ export default function TradePage() {
           </div>
 
           <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+            {/* Warning when Real account has no funds */}
+            {accountMode === "real" && realBalance < 1 && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs p-3 rounded-lg text-center">
+                Your Real account has no funds.<br />
+                <Link href="/deposit" className="underline font-medium">
+                  Click here to deposit via M-Pesa / Card
+                </Link>
+              </div>
+            )}
+
             <div className="flex bg-white/5 rounded-lg p-0.5">
               <button className="flex-1 py-1.5 rounded-md bg-blue-600 text-sm font-medium">AUTO</button>
               <button className="flex-1 py-1.5 rounded-md text-sm text-slate-400">MANUAL</button>
@@ -388,7 +413,11 @@ export default function TradePage() {
               </div>
               <div className="flex gap-1.5 mt-2">
                 {[1, 5, 10, 25, 50, 100].map((v) => (
-                  <button key={v} onClick={() => setStake(v)} className={`flex-1 py-1 text-xs rounded-md ${stake === v ? "bg-blue-600" : "bg-white/5"}`}>
+                  <button
+                    key={v}
+                    onClick={() => setStake(v)}
+                    className={`flex-1 py-1 text-xs rounded-md ${stake === v ? "bg-blue-600" : "bg-white/5"}`}
+                  >
                     ${v}
                   </button>
                 ))}
@@ -463,13 +492,22 @@ export default function TradePage() {
         {/* RIGHT - Open / Closed / Transactions */}
         <div className="hidden lg:flex w-[260px] border-l border-white/5 flex-col bg-[#0c1018]">
           <div className="flex border-b border-white/5 text-xs">
-            <button onClick={() => setActiveTab("open")} className={`flex-1 py-3 ${activeTab === "open" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}>
+            <button
+              onClick={() => setActiveTab("open")}
+              className={`flex-1 py-3 ${activeTab === "open" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}
+            >
               Open (0)
             </button>
-            <button onClick={() => setActiveTab("closed")} className={`flex-1 py-3 ${activeTab === "closed" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}>
+            <button
+              onClick={() => setActiveTab("closed")}
+              className={`flex-1 py-3 ${activeTab === "closed" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}
+            >
               Closed
             </button>
-            <button onClick={() => setActiveTab("transactions")} className={`flex-1 py-3 ${activeTab === "transactions" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}>
+            <button
+              onClick={() => setActiveTab("transactions")}
+              className={`flex-1 py-3 ${activeTab === "transactions" ? "text-blue-400 border-b-2 border-blue-500" : "text-slate-500"}`}
+            >
               Transactions
             </button>
           </div>
